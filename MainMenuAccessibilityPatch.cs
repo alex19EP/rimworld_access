@@ -3,67 +3,178 @@ using RimWorld;
 using System.Collections.Generic;
 using UnityEngine;
 using Verse;
+using Verse.Profile;
 
 namespace RimWorldAccess
 {
-    // Patch to capture the actual menu lists with their actions
-    [HarmonyPatch(typeof(OptionListingUtility), "DrawOptionListing")]
-    public static class OptionListingCapturePatch
-    {
-        [HarmonyPrefix]
-        public static void Prefix(List<ListableOption> optList)
-        {
-            // Only capture if we're in the main menu and the list is valid
-            if (optList == null || optList.Count == 0)
-                return;
-
-            // Store the list in the capture buffer
-            MainMenuAccessibilityPatch.CaptureMenuList(optList);
-        }
-    }
-
     [HarmonyPatch(typeof(MainMenuDrawer), "DoMainMenuControls")]
     public static class MainMenuAccessibilityPatch
     {
         private static bool initialized = false;
-        public static List<ListableOption> cachedColumn0 = new List<ListableOption>();
-        public static List<ListableOption> cachedColumn1 = new List<ListableOption>();
-        private static int captureCount = 0;
-        private static bool isCapturing = false;
-
-        public static void CaptureMenuList(List<ListableOption> optList)
-        {
-            if (!isCapturing)
-                return;
-
-            // First call captures column 0, second call captures column 1
-            if (captureCount == 0)
-            {
-                cachedColumn0 = new List<ListableOption>(optList);
-                captureCount = 1;
-            }
-            else if (captureCount == 1)
-            {
-                cachedColumn1 = new List<ListableOption>(optList);
-                captureCount = 2; // Mark as complete
-            }
-        }
+        private static List<ListableOption> cachedColumn0 = new List<ListableOption>();
+        private static List<ListableOption> cachedColumn1 = new List<ListableOption>();
+        private static bool isInMainMenu = false;
 
         [HarmonyPrefix]
-        public static void Prefix()
+        public static void Prefix(Rect rect, bool anyMapFiles)
         {
-            // Reset capture state at the beginning of DoMainMenuControls
-            captureCount = 0;
-            isCapturing = true;
+            isInMainMenu = true;
+
+            // Rebuild menu structure manually (since we can't intercept the original lists)
+            cachedColumn0.Clear();
+            cachedColumn1.Clear();
+
+            // Build column 0 - main menu options
+            if (Current.ProgramState == ProgramState.Entry)
+            {
+                string tutorialLabel = ("Tutorial".CanTranslate() ? "Tutorial".Translate() : "LearnToPlay".Translate());
+                cachedColumn0.Add(new ListableOption(tutorialLabel, delegate {
+                    // Call the actual InitLearnToPlay method via reflection
+                    var method = AccessTools.Method(typeof(MainMenuDrawer), "InitLearnToPlay");
+                    method.Invoke(null, null);
+                }));
+
+                cachedColumn0.Add(new ListableOption("NewColony".Translate(), delegate {
+                    Find.WindowStack.Add(new Page_SelectScenario());
+                }));
+
+                if (Prefs.DevMode)
+                {
+                    cachedColumn0.Add(new ListableOption("DevQuickTest".Translate(), delegate {
+                        LongEventHandler.QueueLongEvent(delegate {
+                            Root_Play.SetupForQuickTestPlay();
+                            PageUtility.InitGameStart();
+                        }, "GeneratingMap", doAsynchronously: true, GameAndMapInitExceptionHandlers.ErrorWhileGeneratingMap);
+                    }));
+                }
+            }
+
+            if (Current.ProgramState == ProgramState.Playing && !GameDataSaveLoader.SavingIsTemporarilyDisabled && !Current.Game.Info.permadeathMode)
+            {
+                cachedColumn0.Add(new ListableOption("Save".Translate(), delegate {
+                    var method = AccessTools.Method(typeof(MainMenuDrawer), "CloseMainTab");
+                    method.Invoke(null, null);
+                    Find.WindowStack.Add(new Dialog_SaveFileList_Save());
+                }));
+            }
+
+            if (anyMapFiles && (Current.ProgramState != ProgramState.Playing || !Current.Game.Info.permadeathMode))
+            {
+                cachedColumn0.Add(new ListableOption("LoadGame".Translate(), delegate {
+                    var method = AccessTools.Method(typeof(MainMenuDrawer), "CloseMainTab");
+                    method.Invoke(null, null);
+                    Find.WindowStack.Add(new Dialog_SaveFileList_Load());
+                }));
+            }
+
+            if (Current.ProgramState == ProgramState.Playing)
+            {
+                cachedColumn0.Add(new ListableOption("ReviewScenario".Translate(), delegate {
+                    Find.WindowStack.Add(new Dialog_MessageBox(Find.Scenario.GetFullInformationText(), null, null, null, null, Find.Scenario.name) {
+                        layer = WindowLayer.Super
+                    });
+                }));
+            }
+
+            cachedColumn0.Add(new ListableOption("Options".Translate(), delegate {
+                var method = AccessTools.Method(typeof(MainMenuDrawer), "CloseMainTab");
+                method.Invoke(null, null);
+                Find.WindowStack.Add(new Dialog_Options());
+            }, "MenuButton-Options"));
+
+            if (Current.ProgramState == ProgramState.Entry)
+            {
+                cachedColumn0.Add(new ListableOption("Mods".Translate(), delegate {
+                    Find.WindowStack.Add(new Page_ModsConfig());
+                }));
+
+                if (Prefs.DevMode && LanguageDatabase.activeLanguage == LanguageDatabase.defaultLanguage && LanguageDatabase.activeLanguage.anyError)
+                {
+                    cachedColumn0.Add(new ListableOption("SaveTranslationReport".Translate(), LanguageReportGenerator.SaveTranslationReport));
+                }
+
+                cachedColumn0.Add(new ListableOption("Credits".Translate(), delegate {
+                    Find.WindowStack.Add(new Screen_Credits());
+                }));
+            }
+
+            if (Current.ProgramState == ProgramState.Playing)
+            {
+                if (Current.Game.Info.permadeathMode && !GameDataSaveLoader.SavingIsTemporarilyDisabled)
+                {
+                    cachedColumn0.Add(new ListableOption("SaveAndQuitToMainMenu".Translate(), delegate {
+                        LongEventHandler.QueueLongEvent(delegate {
+                            GameDataSaveLoader.SaveGame(Current.Game.Info.permadeathModeUniqueName);
+                            MemoryUtility.ClearAllMapsAndWorld();
+                        }, "Entry", "SavingLongEvent", doAsynchronously: false, null, showExtraUIInfo: false);
+                    }));
+
+                    cachedColumn0.Add(new ListableOption("SaveAndQuitToOS".Translate(), delegate {
+                        LongEventHandler.QueueLongEvent(delegate {
+                            GameDataSaveLoader.SaveGame(Current.Game.Info.permadeathModeUniqueName);
+                            LongEventHandler.ExecuteWhenFinished(Root.Shutdown);
+                        }, "SavingLongEvent", doAsynchronously: false, null, showExtraUIInfo: false);
+                    }));
+                }
+                else
+                {
+                    cachedColumn0.Add(new ListableOption("QuitToMainMenu".Translate(), delegate {
+                        if (GameDataSaveLoader.CurrentGameStateIsValuable)
+                        {
+                            Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation("ConfirmQuit".Translate(), GenScene.GoToMainMenu, destructive: true, null, WindowLayer.Super));
+                        }
+                        else
+                        {
+                            GenScene.GoToMainMenu();
+                        }
+                    }));
+
+                    cachedColumn0.Add(new ListableOption("QuitToOS".Translate(), delegate {
+                        if (GameDataSaveLoader.CurrentGameStateIsValuable)
+                        {
+                            Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation("ConfirmQuit".Translate(), Root.Shutdown, destructive: true, null, WindowLayer.Super));
+                        }
+                        else
+                        {
+                            Root.Shutdown();
+                        }
+                    }));
+                }
+            }
+            else
+            {
+                cachedColumn0.Add(new ListableOption("QuitToOS".Translate(), Root.Shutdown));
+            }
+
+            // Build column 1 - web links (these open URLs, so we keep them simpler)
+            cachedColumn1.Add(new ListableOption("FictionPrimer".Translate(), delegate { Application.OpenURL("https://rimworldgame.com/backstory"); }));
+            cachedColumn1.Add(new ListableOption("LudeonBlog".Translate(), delegate { Application.OpenURL("https://ludeon.com/blog"); }));
+            cachedColumn1.Add(new ListableOption("Subreddit".Translate(), delegate { Application.OpenURL("https://www.reddit.com/r/RimWorld/"); }));
+            cachedColumn1.Add(new ListableOption("OfficialWiki".Translate(), delegate { Application.OpenURL("https://rimworldwiki.com"); }));
+            cachedColumn1.Add(new ListableOption("TynansX".Translate(), delegate { Application.OpenURL("https://x.com/TynanSylvester"); }));
+            cachedColumn1.Add(new ListableOption("TynansDesignBook".Translate(), delegate { Application.OpenURL("https://tynansylvester.com/book"); }));
+            cachedColumn1.Add(new ListableOption("HelpTranslate".Translate(), delegate { Application.OpenURL("https://rimworldgame.com/helptranslate"); }));
+            cachedColumn1.Add(new ListableOption("BuySoundtrack".Translate(), delegate {
+                // Soundtrack submenu
+                List<FloatMenuOption> options = new List<FloatMenuOption>
+                {
+                    new FloatMenuOption("BuySoundtrack_Classic".Translate(), delegate { Application.OpenURL("https://store.steampowered.com/app/990430/RimWorld_Soundtrack/"); }),
+                    new FloatMenuOption("BuySoundtrack_Royalty".Translate(), delegate { Application.OpenURL("https://store.steampowered.com/app/1244270/RimWorld__Royalty_Soundtrack/"); }),
+                    new FloatMenuOption("BuySoundtrack_Anomaly".Translate(), delegate { Application.OpenURL("https://store.steampowered.com/app/2914900/RimWorld__Anomaly_Soundtrack/"); }),
+                    new FloatMenuOption("BuySoundtrack_Odyssey".Translate(), delegate { Application.OpenURL("https://store.steampowered.com/app/3689230/RimWorld__Odyssey_Soundtrack/"); })
+                };
+                Find.WindowStack.Add(new FloatMenu(options));
+            }));
+
+            Log.Message($"RimWorld Access: Built menu - Column 0: {cachedColumn0.Count} items, Column 1: {cachedColumn1.Count} items");
         }
 
         [HarmonyPostfix]
         public static void Postfix(Rect rect, bool anyMapFiles)
         {
-            // Stop capturing after menu is drawn
-            isCapturing = false;
+            isInMainMenu = false;
 
-            // Initialize menu navigation state with captured lists
+            // Initialize menu navigation state with our rebuilt lists
             if (cachedColumn0.Count > 0 && cachedColumn1.Count > 0)
             {
                 if (!initialized)
@@ -74,7 +185,6 @@ namespace RimWorldAccess
                 }
                 else
                 {
-                    // Update the lists each frame in case menu changes
                     MenuNavigationState.Initialize(cachedColumn0, cachedColumn1);
                 }
             }
@@ -85,7 +195,6 @@ namespace RimWorldAccess
             // Draw highlight on selected item
             DrawSelectionHighlight(rect);
         }
-
 
         private static void HandleKeyboardInput()
         {
@@ -114,14 +223,13 @@ namespace RimWorldAccess
 
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter:
-                    // Find the actual menu item and execute its action
-                    ExecuteSelectedMenuItem(MenuNavigationState.CurrentColumn, MenuNavigationState.SelectedIndex);
+                    ExecuteSelectedMenuItem();
                     Event.current.Use();
                     break;
             }
         }
 
-        private static void ExecuteSelectedMenuItem(int column, int index)
+        private static void ExecuteSelectedMenuItem()
         {
             ListableOption selected = MenuNavigationState.GetCurrentSelection();
             if (selected != null && selected.action != null)
@@ -133,7 +241,6 @@ namespace RimWorldAccess
 
         private static void DrawSelectionHighlight(Rect menuRect)
         {
-            // Calculate the position of the selected menu item
             int column = MenuNavigationState.CurrentColumn;
             int selectedIndex = MenuNavigationState.SelectedIndex;
 
@@ -146,18 +253,18 @@ namespace RimWorldAccess
             float yOffset = 0f;
             for (int i = 0; i < selectedIndex; i++)
             {
-                yOffset += currentList[i].minHeight + 7f; // 7f is the spacing
+                yOffset += currentList[i].minHeight + 7f;
             }
 
             // Calculate column offset
-            float xOffset = (column == 0) ? 0f : (170f + 17f); // Column 0 width + gap
+            float xOffset = (column == 0) ? 0f : (170f + 17f);
             float width = (column == 0) ? 170f : 145f;
             float height = currentList[selectedIndex].minHeight;
 
             // Create highlight rect relative to menu rect
             Rect highlightRect = new Rect(
                 menuRect.x + xOffset,
-                menuRect.y + yOffset + 17f, // 17f is the yMin offset from MainMenuDrawer
+                menuRect.y + yOffset + 17f,
                 width,
                 height
             );
