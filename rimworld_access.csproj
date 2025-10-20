@@ -1,7 +1,37 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net472</TargetFramework>
   </PropertyGroup>
+
+<ItemGroup>
+  <!-- MelonLoader References -->
+  <Reference Include="MelonLoader">
+    <HintPath>C:\Program Files (x88)\Steam\steamapps\common\RimWorld\MelonLoader\net6\MelonLoader.dll</HintPath>
+  </Reference>
+  <Reference Include="0Harmony">
+    <HintPath>C:\Program Files (x86)\Steam\steamapps\common\RimWorld\MelonLoader\net6\0Harmony.dll</HintPath>
+  </Reference>
+
+  <!-- Game and Unity Engine References (from the game's Managed folder) -->
+  <Reference Include="Assembly-CSharp">
+    <HintPath>C:\Program Files (x86)\Steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed\Assembly-CSharp.dll</HintPath>
+  </Reference>
+  <Reference Include="UnityEngine.CoreModule">
+    <HintPath>C:\Program Files (x86)\Steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+  </Reference>
+</ItemGroup>
+
+
+  <Target Name="CopyModAfterBuild" AfterTargets="Build">
+    <!-- Display a message in the build output -->
+    <Message Text="--- Copying $(ProjectName).dll to game folder ---" Importance="high" />
+    
+    <!-- Perform the copy operation -->
+    <Copy
+      SourceFiles="$(TargetPath)"
+      DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\"
+    />
+  </Target>
 
 </Project>
