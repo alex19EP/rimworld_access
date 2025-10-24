@@ -45,6 +45,12 @@ namespace RimWorldAccess
                 return;
             }
 
+            // Don't process arrow keys if the work menu is active
+            if (WorkMenuState.IsActive)
+            {
+                return;
+            }
+
             // Prevent processing input multiple times in the same frame
             // (Update() can be called multiple times per frame)
             int currentFrame = Time.frameCount;

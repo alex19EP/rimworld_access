@@ -33,6 +33,10 @@ namespace RimWorldAccess
             if (Find.WindowStack != null && Find.WindowStack.WindowsPreventCameraMotion)
                 return;
 
+            // Don't process if the work menu is active (except we still want to allow it to open)
+            if (WorkMenuState.IsActive)
+                return;
+
             // Check if Alt key is pressed
             bool altPressed = Event.current.alt;
             if (!altPressed)
@@ -83,10 +87,10 @@ namespace RimWorldAccess
                 HandlePawnInfo(PawnInfoType.Character);
                 handled = true;
             }
-            // Handle Alt+W: Work priorities information
+            // Handle Alt+W: Work menu (interactive)
             else if (key == KeyCode.W)
             {
-                HandlePawnInfo(PawnInfoType.Work);
+                HandleWorkMenu();
                 handled = true;
             }
 
@@ -121,6 +125,19 @@ namespace RimWorldAccess
             // Announce
             string announcement = $"Jumped to {selectedPawn.LabelShort}";
             ClipboardHelper.CopyToClipboard(announcement);
+        }
+
+        /// <summary>
+        /// Handles Alt+W: Opens the interactive work assignment menu.
+        /// </summary>
+        private static void HandleWorkMenu()
+        {
+            Pawn selectedPawn = GetSelectedPawn();
+            if (selectedPawn == null)
+                return;
+
+            // Open the work menu
+            WorkMenuState.Open(selectedPawn);
         }
 
         /// <summary>
