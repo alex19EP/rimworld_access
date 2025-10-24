@@ -167,15 +167,16 @@ namespace RimWorldAccess
                 Find.Selector.Select(selectedPawn);
             }
 
-            // Move map cursor to the selected pawn's position
-            IntVec3 pawnPosition = selectedPawn.Position;
-            MapNavigationState.CurrentCursorPosition = pawnPosition;
+            // Get current task for the pawn
+            string currentTask = selectedPawn.GetJobReport();
+            if (string.IsNullOrEmpty(currentTask))
+            {
+                currentTask = "Idle";
+            }
 
-            // Move camera to center on the pawn
-            cameraDriver.JumpToCurrentMapLoc(pawnPosition);
-
-            // Announce the selected pawn's name
-            string announcement = $"{selectedPawn.LabelShort} selected";
+            // Announce the selected pawn's name and current task
+            // Note: Camera does NOT jump - user can use Alt+C to manually jump to pawn
+            string announcement = $"{selectedPawn.LabelShort} selected - {currentTask}";
             ClipboardHelper.CopyToClipboard(announcement);
             MapNavigationState.LastAnnouncedInfo = announcement;
             hasAnnouncedThisFrame = true;
