@@ -9,7 +9,7 @@ namespace RimWorldAccess
 {
     /// <summary>
     /// Unified Harmony patch for UIRoot.UIRootOnGUI to handle all keyboard accessibility features.
-    /// Handles: Escape key for pause menu, Enter key for order-giving, and all windowless menu navigation.
+    /// Handles: Escape key for pause menu, Enter key for order-giving, J key for jump menu, and all windowless menu navigation.
     /// </summary>
     [HarmonyPatch(typeof(UIRoot))]
     [HarmonyPatch("UIRootOnGUI")]
@@ -187,6 +187,50 @@ namespace RimWorldAccess
                 }
             }
 
+            // ===== PRIORITY 4.75: Handle jump menu if active =====
+            if (JumpMenuState.IsActive)
+            {
+                bool handled = false;
+
+                if (key == KeyCode.DownArrow)
+                {
+                    JumpMenuState.SelectNext();
+                    handled = true;
+                }
+                else if (key == KeyCode.UpArrow)
+                {
+                    JumpMenuState.SelectPrevious();
+                    handled = true;
+                }
+                else if (key == KeyCode.RightArrow)
+                {
+                    JumpMenuState.ExpandCategory();
+                    handled = true;
+                }
+                else if (key == KeyCode.LeftArrow)
+                {
+                    JumpMenuState.CollapseCategory();
+                    handled = true;
+                }
+                else if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
+                {
+                    JumpMenuState.JumpToSelected();
+                    handled = true;
+                }
+                else if (key == KeyCode.Escape)
+                {
+                    JumpMenuState.Close();
+                    ClipboardHelper.CopyToClipboard("Jump menu closed");
+                    handled = true;
+                }
+
+                if (handled)
+                {
+                    Event.current.Use();
+                    return;
+                }
+            }
+
             // ===== PRIORITY 5: Handle order float menu if active =====
             if (WindowlessFloatMenuState.IsActive)
             {
@@ -221,7 +265,28 @@ namespace RimWorldAccess
                 }
             }
 
-            // ===== PRIORITY 6: Open pause menu with Escape (if no menu is active and we're in-game) =====
+            // ===== PRIORITY 6: Open jump menu with J key (if no menu is active and we're in-game) =====
+            if (key == KeyCode.J)
+            {
+                // Only open jump menu if:
+                // 1. We're in gameplay (not at main menu)
+                // 2. No windows are preventing camera motion (means a dialog is open)
+                // 3. Not in zone creation mode
+                if (Current.ProgramState == ProgramState.Playing &&
+                    Find.CurrentMap != null &&
+                    (Find.WindowStack == null || !Find.WindowStack.WindowsPreventCameraMotion) &&
+                    !ZoneCreationState.IsInCreationMode)
+                {
+                    // Prevent the default J key behavior
+                    Event.current.Use();
+
+                    // Open the jump menu
+                    JumpMenuState.Open();
+                    return;
+                }
+            }
+
+            // ===== PRIORITY 7: Open pause menu with Escape (if no menu is active and we're in-game) =====
             if (key == KeyCode.Escape)
             {
                 Log.Message("RimWorld Access: Escape key pressed");
@@ -245,7 +310,7 @@ namespace RimWorldAccess
                 }
             }
 
-            // ===== PRIORITY 7: Handle Enter key for order-giving =====
+            // ===== PRIORITY 8: Handle Enter key for order-giving =====
             // Don't process if in zone creation mode
             if (ZoneCreationState.IsInCreationMode)
                 return;

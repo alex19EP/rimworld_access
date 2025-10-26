@@ -49,6 +49,11 @@ namespace RimWorldAccess
             {
                 return;
             }
+            // Don't process arrow keys if the jump menu is active
+            if (JumpMenuState.IsActive)
+            {
+                return;
+            }
 
             // Don't process arrow keys if the save/load menu is active
             if (WindowlessSaveMenuState.IsActive)
