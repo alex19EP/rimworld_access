@@ -251,11 +251,135 @@ namespace RimWorldAccess
             {
                 string label = designator.LabelCap;
 
+                // Add cost and skill information for build designators
+                if (designator is Designator_Build buildDesignator)
+                {
+                    string extraInfo = GetBuildableExtraInfo(buildDesignator.PlacingDef);
+                    if (!string.IsNullOrEmpty(extraInfo))
+                    {
+                        label += extraInfo;
+                    }
+                }
+
                 // Add action
                 options.Add(new FloatMenuOption(label, () => onSelected(designator)));
             }
 
             return options;
+        }
+
+        /// <summary>
+        /// Gets extra information (cost and skill requirements) for a buildable.
+        /// </summary>
+        private static string GetBuildableExtraInfo(BuildableDef buildable)
+        {
+            if (buildable == null)
+                return "";
+
+            List<string> infoParts = new List<string>();
+
+            // Add cost information
+            string costInfo = GetCostInfo(buildable);
+            if (!string.IsNullOrEmpty(costInfo))
+            {
+                infoParts.Add(costInfo);
+            }
+
+            // Add skill requirements
+            string skillInfo = GetSkillRequirements(buildable);
+            if (!string.IsNullOrEmpty(skillInfo))
+            {
+                infoParts.Add(skillInfo);
+            }
+
+            if (infoParts.Count > 0)
+            {
+                return " (" + string.Join(", ", infoParts) + ")";
+            }
+
+            return "";
+        }
+
+        /// <summary>
+        /// Gets cost information for a buildable as a formatted string.
+        /// </summary>
+        private static string GetCostInfo(BuildableDef buildable)
+        {
+            if (buildable == null)
+                return "";
+
+            List<string> costParts = new List<string>();
+
+            // Get the cost list (handles difficulty adjustments automatically)
+            List<ThingDefCountClass> costs = buildable.CostList;
+
+            if (costs != null && costs.Count > 0)
+            {
+                foreach (ThingDefCountClass cost in costs)
+                {
+                    costParts.Add($"{cost.count} {cost.thingDef.label}");
+                }
+            }
+
+            // Add stuff cost if applicable
+            if (buildable is ThingDef thingDef && thingDef.MadeFromStuff)
+            {
+                int stuffCount = buildable.CostStuffCount;
+                if (stuffCount > 0)
+                {
+                    // Get stuff categories
+                    if (buildable.stuffCategories != null && buildable.stuffCategories.Count > 0)
+                    {
+                        string stuffLabel = buildable.stuffCategories[0].label;
+                        if (buildable.stuffCategories.Count > 1)
+                        {
+                            stuffLabel = "stuff";
+                        }
+                        costParts.Add($"{stuffCount} {stuffLabel}");
+                    }
+                    else
+                    {
+                        costParts.Add($"{stuffCount} stuff");
+                    }
+                }
+            }
+
+            if (costParts.Count > 0)
+            {
+                return "Cost: " + string.Join(", ", costParts);
+            }
+
+            return "";
+        }
+
+        /// <summary>
+        /// Gets skill requirements for a buildable as a formatted string.
+        /// </summary>
+        private static string GetSkillRequirements(BuildableDef buildable)
+        {
+            if (buildable == null)
+                return "";
+
+            List<string> skillParts = new List<string>();
+
+            // Check construction skill requirement
+            if (buildable.constructionSkillPrerequisite > 0)
+            {
+                skillParts.Add($"Construction {buildable.constructionSkillPrerequisite}");
+            }
+
+            // Check artistic skill requirement
+            if (buildable.artisticSkillPrerequisite > 0)
+            {
+                skillParts.Add($"Artistic {buildable.artisticSkillPrerequisite}");
+            }
+
+            if (skillParts.Count > 0)
+            {
+                return "Skills: " + string.Join(", ", skillParts);
+            }
+
+            return "";
         }
 
         /// <summary>
