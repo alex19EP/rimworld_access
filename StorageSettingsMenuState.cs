@@ -210,7 +210,7 @@ namespace RimWorldAccess
             AnnounceCurrentSelection();
         }
 
-        public static void ExpandOrToggleOn()
+        public static void ExpandCurrent()
         {
             if (menuItems == null || selectedIndex >= menuItems.Count)
                 return;
@@ -225,7 +225,7 @@ namespace RimWorldAccess
                     break;
 
                 case MenuItemType.Category:
-                    // If collapsed, expand; if expanded, toggle on
+                    // Only expand if collapsed
                     if (!item.isExpanded)
                     {
                         TreeNode_ThingCategory node = item.data as TreeNode_ThingCategory;
@@ -238,32 +238,23 @@ namespace RimWorldAccess
                     }
                     else
                     {
-                        ToggleCategory(item, true);
+                        ClipboardHelper.CopyToClipboard($"{item.label} (already expanded)");
                     }
                     break;
 
                 case MenuItemType.ThingDef:
                 case MenuItemType.SpecialFilter:
-                    ToggleItem(item, true);
-                    break;
-
                 case MenuItemType.HitPointsRange:
                 case MenuItemType.QualityRange:
-                    // Left/right arrows don't apply to ranges anymore - use Enter to open submenu
-                    ClipboardHelper.CopyToClipboard("Press Enter to edit range");
-                    break;
-
                 case MenuItemType.ClearAll:
-                    ClearAllItems();
-                    break;
-
                 case MenuItemType.AllowAll:
-                    AllowAllItems();
+                    // Right arrow doesn't apply to these types
+                    ClipboardHelper.CopyToClipboard("Press Enter to select");
                     break;
             }
         }
 
-        public static void CollapseOrToggleOff()
+        public static void CollapseCurrent()
         {
             if (menuItems == null || selectedIndex >= menuItems.Count)
                 return;
@@ -278,7 +269,7 @@ namespace RimWorldAccess
                     break;
 
                 case MenuItemType.Category:
-                    // If expanded, collapse; if collapsed, toggle off
+                    // Only collapse if expanded
                     if (item.isExpanded)
                     {
                         TreeNode_ThingCategory node = item.data as TreeNode_ThingCategory;
@@ -291,19 +282,18 @@ namespace RimWorldAccess
                     }
                     else
                     {
-                        ToggleCategory(item, false);
+                        ClipboardHelper.CopyToClipboard($"{item.label} (already collapsed)");
                     }
                     break;
 
                 case MenuItemType.ThingDef:
                 case MenuItemType.SpecialFilter:
-                    ToggleItem(item, false);
-                    break;
-
                 case MenuItemType.HitPointsRange:
                 case MenuItemType.QualityRange:
-                    // Left/right arrows don't apply to ranges anymore - use Enter to open submenu
-                    ClipboardHelper.CopyToClipboard("Press Enter to edit range");
+                case MenuItemType.ClearAll:
+                case MenuItemType.AllowAll:
+                    // Left arrow doesn't apply to these types
+                    ClipboardHelper.CopyToClipboard("Press Enter to select");
                     break;
             }
         }

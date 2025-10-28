@@ -59,12 +59,12 @@ namespace RimWorldAccess
                     break;
 
                 case KeyCode.RightArrow:
-                    StorageSettingsMenuState.ExpandOrToggleOn();
+                    StorageSettingsMenuState.ExpandCurrent();
                     Event.current.Use();
                     break;
 
                 case KeyCode.LeftArrow:
-                    StorageSettingsMenuState.CollapseOrToggleOff();
+                    StorageSettingsMenuState.CollapseCurrent();
                     Event.current.Use();
                     break;
 
