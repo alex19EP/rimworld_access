@@ -56,8 +56,6 @@ Ctrl+V        Paste copied schedule to current pawn
 Enter         Save all pending changes and close
 Escape        Cancel changes and close
 
-Navigation: Use arrows to move through the grid. Current cell shows pawn name, hour, and assignment.
-Changes are marked as "(pending)" until you press Enter to save.
 
 
 COLONIST ACTIONS
@@ -67,9 +65,37 @@ R             Toggle draft mode for selected colonist
 Alt+M         Display mood information and thoughts
 Alt+N         Display needs
 Alt+H         Display health
-Alt+W         Open work menu (Space toggles work types, Enter confirms)
+Alt+W         Open work menu (see Work Menu section below)
 Alt+G         Display gear
 S             Open schedule menu (manage colonist timetables)
+
+
+WORK MENU (Press Alt+W)
+-----------------------
+Manage colonist work assignments with support for both simple mode and manual priorities.
+
+Common Controls:
+Up/Down       Navigate work types (stops at top/bottom)
+Tab           Switch to next colonist
+Shift+Tab     Switch to previous colonist
+M             Toggle between simple mode and manual priorities mode
+Enter         Save all changes and close
+Escape        Cancel changes and close
+
+Simple Mode (toggle work types on/off):
+Space         Toggle selected work type enabled/disabled
+
+Manual Priority Mode (assign priority numbers 1-4):
+0-4           Set priority directly (0=disabled, 1=highest, 4=lowest)
+Space         Quick toggle between disabled and default (priority 3)
+Shift+Up      Move work type up in priority order (affects execution when priorities equal)
+Shift+Down    Move work type down in priority order (affects execution when priorities equal)
+
+Notes:
+- In manual priority mode, lower numbers execute first (1 before 2 before 3 before 4)
+- Work types with the same priority number use list order as tiebreaker
+- Changes are marked as "(pending)" until you press Enter to save
+- Column reordering (Shift+Up/Down) affects all colonists globally.  As far as I am aware, this is an unavoidable quirk of the game's logic, and not something I can change. 
 
 
 QUICK NAVIGATION (Press J)

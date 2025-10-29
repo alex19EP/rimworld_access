@@ -7,22 +7,24 @@ namespace RimWorldAccess
 {
     /// <summary>
     /// Manages the state and navigation for the interactive work assignment menu.
-    /// Tracks work types, their enabled/disabled states, and pending changes.
+    /// Tracks work types, their priority values (0-4), and pending changes.
+    /// Supports both simple mode (toggle on/off) and manual priority mode (1-4).
     /// </summary>
     public static class WorkMenuState
     {
         private static bool isActive = false;
         private static Pawn currentPawn = null;
+        private static int currentPawnIndex = 0;
+        private static List<Pawn> allPawns = new List<Pawn>();
         private static int selectedIndex = 0;
         private static List<WorkTypeEntry> workEntries = new List<WorkTypeEntry>();
-
-        // Track changes made during the menu session
-        private static Dictionary<WorkTypeDef, bool> pendingChanges = new Dictionary<WorkTypeDef, bool>();
 
         public static bool IsActive => isActive;
         public static int SelectedIndex => selectedIndex;
         public static List<WorkTypeEntry> WorkEntries => workEntries;
         public static Pawn CurrentPawn => currentPawn;
+        public static int CurrentPawnIndex => currentPawnIndex;
+        public static int TotalPawns => allPawns.Count;
 
         /// <summary>
         /// Opens the work menu for the specified pawn.
@@ -35,7 +37,27 @@ namespace RimWorldAccess
             isActive = true;
             currentPawn = pawn;
             selectedIndex = 0;
-            pendingChanges.Clear();
+
+            // Build list of all colonists
+            allPawns.Clear();
+            if (Find.CurrentMap != null)
+            {
+                allPawns = Find.CurrentMap.mapPawns.FreeColonists.ToList();
+                currentPawnIndex = allPawns.IndexOf(pawn);
+                if (currentPawnIndex < 0)
+                    currentPawnIndex = 0;
+            }
+
+            LoadWorkTypesForCurrentPawn();
+        }
+
+        /// <summary>
+        /// Loads work types for the current pawn.
+        /// </summary>
+        private static void LoadWorkTypesForCurrentPawn()
+        {
+            if (currentPawn == null || currentPawn.workSettings == null)
+                return;
 
             // Build the list of work types
             workEntries.Clear();
@@ -45,21 +67,22 @@ namespace RimWorldAccess
             {
                 if (workType.visible)
                 {
-                    bool isDisabled = pawn.WorkTypeIsDisabled(workType);
-                    bool isEnabled = !isDisabled && pawn.workSettings.WorkIsActive(workType);
+                    bool isDisabled = currentPawn.WorkTypeIsDisabled(workType);
+                    int priority = isDisabled ? 0 : currentPawn.workSettings.GetPriority(workType);
 
                     workEntries.Add(new WorkTypeEntry
                     {
                         WorkType = workType,
                         IsDisabled = isDisabled,
-                        IsEnabled = isEnabled,
-                        OriginalState = isEnabled
+                        CurrentPriority = priority,
+                        OriginalPriority = priority
                     });
                 }
             }
 
-            // Sort by label for easier navigation
-            workEntries = workEntries.OrderBy(e => e.WorkType.labelShort).ToList();
+            // Sort by naturalPriority (descending = higher priority first)
+            // This matches the execution order when priority numbers are equal
+            workEntries = workEntries.OrderByDescending(e => e.WorkType.naturalPriority).ToList();
 
             // Announce menu opened
             UpdateClipboard();
@@ -72,9 +95,10 @@ namespace RimWorldAccess
         {
             isActive = false;
             currentPawn = null;
+            currentPawnIndex = 0;
+            allPawns.Clear();
             selectedIndex = 0;
             workEntries.Clear();
-            pendingChanges.Clear();
 
             ClipboardHelper.CopyToClipboard("Work menu cancelled");
         }
@@ -94,18 +118,9 @@ namespace RimWorldAccess
 
             foreach (var entry in workEntries)
             {
-                if (!entry.IsDisabled && entry.IsEnabled != entry.OriginalState)
+                if (!entry.IsDisabled && entry.CurrentPriority != entry.OriginalPriority)
                 {
-                    if (entry.IsEnabled)
-                    {
-                        // Enable the work type with default priority
-                        currentPawn.workSettings.SetPriority(entry.WorkType, 3);
-                    }
-                    else
-                    {
-                        // Disable the work type
-                        currentPawn.workSettings.SetPriority(entry.WorkType, 0);
-                    }
+                    currentPawn.workSettings.SetPriority(entry.WorkType, entry.CurrentPriority);
                     changesApplied++;
                 }
             }
@@ -118,43 +133,54 @@ namespace RimWorldAccess
 
             isActive = false;
             currentPawn = null;
+            currentPawnIndex = 0;
+            allPawns.Clear();
             selectedIndex = 0;
             workEntries.Clear();
-            pendingChanges.Clear();
         }
 
         /// <summary>
-        /// Moves selection up in the list (wraps around).
+        /// Moves selection up in the list (stops at top).
         /// </summary>
         public static void MoveUp()
         {
             if (workEntries.Count == 0)
                 return;
 
-            selectedIndex--;
-            if (selectedIndex < 0)
-                selectedIndex = workEntries.Count - 1;
-
-            UpdateClipboard();
+            if (selectedIndex > 0)
+            {
+                selectedIndex--;
+                UpdateClipboard();
+            }
+            else
+            {
+                ClipboardHelper.CopyToClipboard("At top of list");
+            }
         }
 
         /// <summary>
-        /// Moves selection down in the list (wraps around).
+        /// Moves selection down in the list (stops at bottom).
         /// </summary>
         public static void MoveDown()
         {
             if (workEntries.Count == 0)
                 return;
 
-            selectedIndex++;
-            if (selectedIndex >= workEntries.Count)
-                selectedIndex = 0;
-
-            UpdateClipboard();
+            if (selectedIndex < workEntries.Count - 1)
+            {
+                selectedIndex++;
+                UpdateClipboard();
+            }
+            else
+            {
+                ClipboardHelper.CopyToClipboard("At bottom of list");
+            }
         }
 
         /// <summary>
         /// Toggles the enabled state of the currently selected work type.
+        /// In simple mode: toggles between 0 (disabled) and 3 (default).
+        /// In manual priority mode: toggles between 0 (disabled) and 3 (medium).
         /// Only works if the work type is not permanently disabled.
         /// </summary>
         public static void ToggleSelected()
@@ -170,12 +196,263 @@ namespace RimWorldAccess
                 return;
             }
 
-            entry.IsEnabled = !entry.IsEnabled;
+            // Toggle between 0 (disabled) and 3 (default enabled)
+            entry.CurrentPriority = (entry.CurrentPriority == 0) ? 3 : 0;
+            UpdateClipboard();
+        }
+
+        /// <summary>
+        /// Sets the priority of the currently selected work type to a specific value (0-4).
+        /// Only works in manual priority mode and if the work type is not permanently disabled.
+        /// </summary>
+        public static void SetPriority(int priority)
+        {
+            if (workEntries.Count == 0 || selectedIndex < 0 || selectedIndex >= workEntries.Count)
+                return;
+
+            var entry = workEntries[selectedIndex];
+
+            if (entry.IsDisabled)
+            {
+                ClipboardHelper.CopyToClipboard($"{entry.WorkType.labelShort}: Disabled - cannot change priority");
+                return;
+            }
+
+            // Validate priority range
+            if (priority < 0 || priority > 4)
+                return;
+
+            entry.CurrentPriority = priority;
+            UpdateClipboard();
+        }
+
+        /// <summary>
+        /// Switches to the next pawn in the list (wraps around).
+        /// </summary>
+        public static void SwitchToNextPawn()
+        {
+            if (allPawns.Count == 0)
+                return;
+
+            currentPawnIndex = (currentPawnIndex + 1) % allPawns.Count;
+            currentPawn = allPawns[currentPawnIndex];
+            selectedIndex = 0;
+            LoadWorkTypesForCurrentPawn();
+            ClipboardHelper.CopyToClipboard($"Now editing: {currentPawn.LabelShort} ({currentPawnIndex + 1}/{allPawns.Count})");
+        }
+
+        /// <summary>
+        /// Switches to the previous pawn in the list (wraps around).
+        /// </summary>
+        public static void SwitchToPreviousPawn()
+        {
+            if (allPawns.Count == 0)
+                return;
+
+            currentPawnIndex--;
+            if (currentPawnIndex < 0)
+                currentPawnIndex = allPawns.Count - 1;
+
+            currentPawn = allPawns[currentPawnIndex];
+            selectedIndex = 0;
+            LoadWorkTypesForCurrentPawn();
+            ClipboardHelper.CopyToClipboard($"Now editing: {currentPawn.LabelShort} ({currentPawnIndex + 1}/{allPawns.Count})");
+        }
+
+        /// <summary>
+        /// Moves the selected work type up in the column order (left in UI).
+        /// This affects execution order when priority numbers are equal by swapping naturalPriority values.
+        /// Only works in manual priority mode.
+        /// </summary>
+        public static void ReorderWorkTypeUp()
+        {
+            if (!Find.PlaySettings.useWorkPriorities)
+            {
+                ClipboardHelper.CopyToClipboard("Column reordering only available in manual priorities mode");
+                return;
+            }
+
+            if (workEntries.Count == 0 || selectedIndex < 0 || selectedIndex >= workEntries.Count)
+                return;
+
+            var entry = workEntries[selectedIndex];
+
+            // Get all work types sorted by naturalPriority (descending = higher priority first)
+            var allWorkTypes = DefDatabase<WorkTypeDef>.AllDefsListForReading
+                .Where(w => w.visible)
+                .OrderByDescending(w => w.naturalPriority)
+                .ToList();
+
+            int currentIndex = allWorkTypes.IndexOf(entry.WorkType);
+            if (currentIndex <= 0)
+            {
+                ClipboardHelper.CopyToClipboard($"{entry.WorkType.labelShort}: Already at highest priority");
+                return;
+            }
+
+            // Swap naturalPriority values with the work type that has higher priority
+            var higherWorkType = allWorkTypes[currentIndex - 1];
+            int temp = entry.WorkType.naturalPriority;
+            entry.WorkType.naturalPriority = higherWorkType.naturalPriority;
+            higherWorkType.naturalPriority = temp;
+
+            // Also update column order for visual consistency
+            var workTableDef = PawnTableDefOf.Work;
+            var columns = workTableDef.columns;
+            var column = columns.FirstOrDefault(c => c.workType == entry.WorkType);
+            if (column != null)
+            {
+                int columnIndex = columns.IndexOf(column);
+                if (columnIndex > 0)
+                {
+                    columns.RemoveAt(columnIndex);
+                    columns.Insert(columnIndex - 1, column);
+                }
+            }
+
+            // Force table refresh if work tab is open
+            var workTab = Find.WindowStack.WindowOfType<MainTabWindow_Work>();
+            if (workTab != null)
+            {
+                workTab.Notify_ResolutionChanged();
+            }
+
+            // Force all pawns to recache their work givers so execution order updates
+            if (Find.CurrentMap != null)
+            {
+                foreach (Pawn pawn in Find.CurrentMap.mapPawns.FreeColonists)
+                {
+                    if (pawn.workSettings != null)
+                    {
+                        pawn.workSettings.Notify_UseWorkPrioritiesChanged();
+                    }
+                }
+            }
+
+            // Re-sort the workEntries list to reflect the new order
+            var selectedWorkType = entry.WorkType;
+            workEntries = workEntries.OrderByDescending(e => e.WorkType.naturalPriority).ToList();
+
+            // Update selectedIndex to follow the moved item
+            selectedIndex = workEntries.FindIndex(e => e.WorkType == selectedWorkType);
+            if (selectedIndex < 0)
+                selectedIndex = 0;
+
+            ClipboardHelper.CopyToClipboard($"{entry.WorkType.labelShort}: Moved up in priority order (will execute earlier when priorities are equal)");
+        }
+
+        /// <summary>
+        /// Moves the selected work type down in the column order (right in UI).
+        /// This affects execution order when priority numbers are equal by swapping naturalPriority values.
+        /// Only works in manual priority mode.
+        /// </summary>
+        public static void ReorderWorkTypeDown()
+        {
+            if (!Find.PlaySettings.useWorkPriorities)
+            {
+                ClipboardHelper.CopyToClipboard("Column reordering only available in manual priorities mode");
+                return;
+            }
+
+            if (workEntries.Count == 0 || selectedIndex < 0 || selectedIndex >= workEntries.Count)
+                return;
+
+            var entry = workEntries[selectedIndex];
+
+            // Get all work types sorted by naturalPriority (descending = higher priority first)
+            var allWorkTypes = DefDatabase<WorkTypeDef>.AllDefsListForReading
+                .Where(w => w.visible)
+                .OrderByDescending(w => w.naturalPriority)
+                .ToList();
+
+            int currentIndex = allWorkTypes.IndexOf(entry.WorkType);
+            if (currentIndex >= allWorkTypes.Count - 1)
+            {
+                ClipboardHelper.CopyToClipboard($"{entry.WorkType.labelShort}: Already at lowest priority");
+                return;
+            }
+
+            // Swap naturalPriority values with the work type that has lower priority
+            var lowerWorkType = allWorkTypes[currentIndex + 1];
+            int temp = entry.WorkType.naturalPriority;
+            entry.WorkType.naturalPriority = lowerWorkType.naturalPriority;
+            lowerWorkType.naturalPriority = temp;
+
+            // Also update column order for visual consistency
+            var workTableDef = PawnTableDefOf.Work;
+            var columns = workTableDef.columns;
+            var column = columns.FirstOrDefault(c => c.workType == entry.WorkType);
+            if (column != null)
+            {
+                int columnIndex = columns.IndexOf(column);
+                if (columnIndex < columns.Count - 1)
+                {
+                    columns.RemoveAt(columnIndex);
+                    columns.Insert(columnIndex + 1, column);
+                }
+            }
+
+            // Force table refresh if work tab is open
+            var workTab = Find.WindowStack.WindowOfType<MainTabWindow_Work>();
+            if (workTab != null)
+            {
+                workTab.Notify_ResolutionChanged();
+            }
+
+            // Force all pawns to recache their work givers so execution order updates
+            if (Find.CurrentMap != null)
+            {
+                foreach (Pawn pawn in Find.CurrentMap.mapPawns.FreeColonists)
+                {
+                    if (pawn.workSettings != null)
+                    {
+                        pawn.workSettings.Notify_UseWorkPrioritiesChanged();
+                    }
+                }
+            }
+
+            // Re-sort the workEntries list to reflect the new order
+            var selectedWorkType = entry.WorkType;
+            workEntries = workEntries.OrderByDescending(e => e.WorkType.naturalPriority).ToList();
+
+            // Update selectedIndex to follow the moved item
+            selectedIndex = workEntries.FindIndex(e => e.WorkType == selectedWorkType);
+            if (selectedIndex < 0)
+                selectedIndex = 0;
+
+            ClipboardHelper.CopyToClipboard($"{entry.WorkType.labelShort}: Moved down in priority order (will execute later when priorities are equal)");
+        }
+
+        /// <summary>
+        /// Toggles between simple mode and manual priority mode.
+        /// </summary>
+        public static void ToggleMode()
+        {
+            bool wasUsingPriorities = Find.PlaySettings.useWorkPriorities;
+            Find.PlaySettings.useWorkPriorities = !wasUsingPriorities;
+
+            // Convert priorities when switching modes
+            foreach (var entry in workEntries)
+            {
+                if (!entry.IsDisabled)
+                {
+                    if (wasUsingPriorities)
+                    {
+                        // Switching from manual to simple: convert any non-zero priority to "enabled" (3)
+                        entry.CurrentPriority = (entry.CurrentPriority > 0) ? 3 : 0;
+                    }
+                    // When switching from simple to manual, priorities stay as they are (0 or 3)
+                }
+            }
+
+            string mode = Find.PlaySettings.useWorkPriorities ? "manual priorities" : "simple";
+            ClipboardHelper.CopyToClipboard($"Switched to {mode} mode");
             UpdateClipboard();
         }
 
         /// <summary>
         /// Gets the current selection as a formatted string for screen reader.
+        /// Announces differently based on whether manual priorities mode is active.
         /// </summary>
         private static void UpdateClipboard()
         {
@@ -186,34 +463,59 @@ namespace RimWorldAccess
             }
 
             var entry = workEntries[selectedIndex];
-            string status;
+            string message;
 
             if (entry.IsDisabled)
             {
-                status = "Disabled";
+                message = $"{entry.WorkType.labelShort}: Permanently disabled";
             }
-            else if (entry.IsEnabled)
+            else if (Find.PlaySettings.useWorkPriorities)
             {
-                status = entry.OriginalState ? "Selected" : "Selected (pending)";
+                // Manual priority mode: announce priority number
+                string priorityDesc = GetPriorityDescription(entry.CurrentPriority);
+                string changed = (entry.CurrentPriority != entry.OriginalPriority) ? " (pending)" : "";
+                message = $"{entry.WorkType.labelShort}: {priorityDesc}{changed}";
             }
             else
             {
-                status = entry.OriginalState ? "Unselected (pending)" : "Unselected";
+                // Simple mode: announce enabled/disabled
+                bool isEnabled = (entry.CurrentPriority > 0);
+                bool wasEnabled = (entry.OriginalPriority > 0);
+                string status = isEnabled ? "Enabled" : "Disabled";
+                string changed = (isEnabled != wasEnabled) ? " (pending)" : "";
+                message = $"{entry.WorkType.labelShort}: {status}{changed}";
             }
 
-            string message = $"{status}: {entry.WorkType.labelShort}";
             ClipboardHelper.CopyToClipboard(message);
         }
 
         /// <summary>
+        /// Gets a human-readable description of a priority value.
+        /// </summary>
+        private static string GetPriorityDescription(int priority)
+        {
+            switch (priority)
+            {
+                case 0: return "Disabled";
+                case 1: return "Priority 1 (highest)";
+                case 2: return "Priority 2 (high)";
+                case 3: return "Priority 3 (medium)";
+                case 4: return "Priority 4 (low)";
+                default: return $"Priority {priority}";
+            }
+        }
+
+        /// <summary>
         /// Represents a work type entry in the menu.
+        /// Tracks priority values (0-4) where:
+        /// 0 = Disabled, 1 = Highest, 2 = High, 3 = Medium, 4 = Low
         /// </summary>
         public class WorkTypeEntry
         {
             public WorkTypeDef WorkType { get; set; }
-            public bool IsDisabled { get; set; }  // Permanently disabled (cannot be changed)
-            public bool IsEnabled { get; set; }    // Current state in the menu
-            public bool OriginalState { get; set; } // Original state when menu opened
+            public bool IsDisabled { get; set; }      // Permanently disabled (cannot be changed)
+            public int CurrentPriority { get; set; }  // Current priority in the menu (0-4)
+            public int OriginalPriority { get; set; } // Original priority when menu opened (0-4)
         }
     }
 }
