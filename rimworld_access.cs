@@ -10,6 +10,9 @@ namespace RimWorldAccess
     {
         public override void OnInitializeMelon()
         {
+            // Initialize the static logger so other classes can use it
+            ModLogger.Initialize(LoggerInstance);
+
             LoggerInstance.Msg("RimWorld Access Mod - Initializing accessibility features...");
 
             // Apply Harmony patches

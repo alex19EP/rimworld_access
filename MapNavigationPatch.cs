@@ -254,6 +254,11 @@ namespace RimWorldAccess
                     // Move camera to center on new cursor position
                     __instance.JumpToCurrentMapLoc(newPosition);
 
+                    // Play terrain audio feedback
+                    ModLogger.Msg($"Cursor moved to {newPosition}, attempting to play terrain audio");
+                    TerrainDef terrain = newPosition.GetTerrain(Find.CurrentMap);
+                    TerrainAudioHelper.PlayTerrainAudio(terrain, 0.5f);
+
                     // Get tile information and announce it
                     string tileInfo = TileInfoHelper.GetTileSummary(newPosition, Find.CurrentMap);
 

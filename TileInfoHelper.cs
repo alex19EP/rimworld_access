@@ -13,8 +13,8 @@ namespace RimWorldAccess
     public static class TileInfoHelper
     {
         /// <summary>
-        /// Gets a concise summary of what's on a tile, prioritizing pawns, buildings, and items.
-        /// Format: "John, Mary, Stone wall, 5 items, at 23, 30"
+        /// Gets a concise summary of what's on a tile.
+        /// Format: "[item1, item2, ... last item], indoors/outdoors, {lighting level}, at X, Z"
         /// </summary>
         public static string GetTileSummary(IntVec3 position, Map map)
         {
@@ -26,108 +26,55 @@ namespace RimWorldAccess
             // Get all things at this position
             List<Thing> things = position.GetThingList(map);
 
-            // Categorize things
-            var pawns = new List<Pawn>();
-            var buildings = new List<Building>();
-            var items = new List<Thing>();
-            var plants = new List<Plant>();
-
-            foreach (var thing in things)
-            {
-                if (thing is Pawn pawn)
-                    pawns.Add(pawn);
-                else if (thing is Building building)
-                    buildings.Add(building);
-                else if (thing is Plant plant)
-                    plants.Add(plant);
-                else
-                    items.Add(thing);
-            }
-
-            // Build the announcement prioritizing pawns first
+            // List all things on the tile (up to 5 items, then summarize)
+            int itemsListed = 0;
+            int maxItemsToList = 5;
             bool addedSomething = false;
 
-            // Add individual pawns (most important)
-            foreach (var pawn in pawns.Take(3)) // Limit to first 3 pawns
+            foreach (var thing in things.Take(maxItemsToList))
             {
                 if (addedSomething) sb.Append(", ");
-                sb.Append(pawn.LabelShort);
-                addedSomething = true;
-            }
-            if (pawns.Count > 3)
-            {
-                if (addedSomething) sb.Append(", ");
-                sb.Append($"and {pawns.Count - 3} more pawns");
-                addedSomething = true;
-            }
 
-            // Add individual buildings (next priority)
-            foreach (var building in buildings.Take(2)) // Limit to first 2 buildings
-            {
-                if (addedSomething) sb.Append(", ");
-                sb.Append(building.LabelShort);
+                // Get the label for this thing
+                string label = thing.LabelShort;
 
-                // Add temperature control information if building is a cooler/heater
-                string tempControlInfo = GetTemperatureControlInfo(building);
-                if (!string.IsNullOrEmpty(tempControlInfo))
+                // Special handling for forbidden items
+                if (thing is Thing item)
                 {
-                    sb.Append(", ");
-                    sb.Append(tempControlInfo);
-                }
-
-                // Add power information if building has power components
-                string powerInfo = PowerInfoHelper.GetPowerInfo(building);
-                if (!string.IsNullOrEmpty(powerInfo))
-                {
-                    sb.Append(", ");
-                    sb.Append(powerInfo);
-                }
-
-                addedSomething = true;
-            }
-            if (buildings.Count > 2)
-            {
-                if (addedSomething) sb.Append(", ");
-                sb.Append($"and {buildings.Count - 2} more buildings");
-                addedSomething = true;
-            }
-
-            // Summarize items by count
-            if (items.Count > 0)
-            {
-                if (addedSomething) sb.Append(", ");
-                if (items.Count == 1)
-                {
-                    string itemLabel = items[0].LabelShort;
-                    // Check if item is forbidden
-                    CompForbiddable forbiddable = items[0].TryGetComp<CompForbiddable>();
+                    CompForbiddable forbiddable = item.TryGetComp<CompForbiddable>();
                     if (forbiddable != null && forbiddable.Forbidden)
                     {
-                        itemLabel = "Forbidden " + itemLabel;
+                        label = "Forbidden " + label;
                     }
-                    sb.Append(itemLabel);
                 }
-                else
-                {
-                    sb.Append($"{items.Count} items");
-                }
+
+                sb.Append(label);
                 addedSomething = true;
+                itemsListed++;
             }
 
-            // Add plant if present and nothing else important
-            if (plants.Count > 0 && !addedSomething)
+            // If there are more items than we listed, add summary
+            if (things.Count > maxItemsToList)
             {
-                sb.Append(plants[0].LabelShort);
+                if (addedSomething) sb.Append(", ");
+                sb.Append($"and {things.Count - maxItemsToList} more");
                 addedSomething = true;
             }
 
-            // If nothing on the tile, mention terrain
+            // If tile is empty, check if terrain has audio match
             if (!addedSomething)
             {
                 TerrainDef terrain = position.GetTerrain(map);
-                if (terrain != null)
+                if (terrain != null && !TerrainAudioHelper.HasAudioMatch(terrain))
                 {
+                    // No audio match - announce the terrain name
                     sb.Append(terrain.LabelCap);
+                    addedSomething = true;
+                }
+                else
+                {
+                    // Has audio match or no terrain - just say "Empty"
+                    sb.Append("Empty");
                     addedSomething = true;
                 }
             }
@@ -136,16 +83,21 @@ namespace RimWorldAccess
             Zone zone = position.GetZone(map);
             if (zone != null)
             {
-                if (addedSomething) sb.Append(", ");
-                sb.Append($"in {zone.label}");
-                addedSomething = true;
+                sb.Append($", in {zone.label}");
             }
 
+            // Add indoor/outdoor status
+            RoofDef roof = position.GetRoof(map);
+            string locationStatus = (roof != null) ? "indoors" : "outdoors";
+            sb.Append($", {locationStatus}");
+
+            // Add light level
+            PsychGlow lightLevel = map.glowGrid.PsychGlowAt(position);
+            string lightDescription = lightLevel.GetLabel();
+            sb.Append($", {lightDescription}");
+
             // Add coordinates
-            if (addedSomething)
-                sb.Append($", at {position.x}, {position.z}");
-            else
-                sb.Append($"Empty, at {position.x}, {position.z}");
+            sb.Append($", at {position.x}, {position.z}");
 
             return sb.ToString();
         }
