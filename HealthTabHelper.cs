@@ -320,6 +320,48 @@ namespace RimWorldAccess
         }
 
         /// <summary>
+        /// Gets all available recipe types (operations) for a pawn, without body part specifics.
+        /// </summary>
+        public static List<RecipeDef> GetAvailableRecipes(Pawn pawn)
+        {
+            if (pawn?.health == null)
+                return new List<RecipeDef>();
+
+            // Get all medical recipes that can be performed on this pawn
+            var recipes = DefDatabase<RecipeDef>.AllDefs
+                .Where(r => r.AllRecipeUsers != null &&
+                           r.AllRecipeUsers.Contains(pawn.def) &&
+                           r.AvailableNow)
+                .ToList();
+
+            return recipes;
+        }
+
+        /// <summary>
+        /// Gets all body parts that a recipe can be applied to for a pawn.
+        /// Returns an empty list if the recipe doesn't target specific body parts.
+        /// </summary>
+        public static List<BodyPartRecord> GetPartsForRecipe(Pawn pawn, RecipeDef recipe)
+        {
+            var parts = new List<BodyPartRecord>();
+
+            if (pawn?.health == null || recipe == null)
+                return parts;
+
+            // Use the recipe's Worker to get valid parts (this handles all the complex logic)
+            if (recipe.Worker != null)
+            {
+                var validParts = recipe.Worker.GetPartsToApplyOn(pawn, recipe);
+                if (validParts != null)
+                {
+                    parts.AddRange(validParts);
+                }
+            }
+
+            return parts;
+        }
+
+        /// <summary>
         /// Gets all available operations for a pawn.
         /// </summary>
         public static List<OperationInfo> GetAvailableOperations(Pawn pawn)
@@ -413,10 +455,14 @@ namespace RimWorldAccess
                 if (pawn?.BillStack == null)
                     return false;
 
-                // Create bill with no parameters, then set properties
-                Bill_Medical bill = new Bill_Medical();
+                // Create bill using proper constructor with recipe and uniqueIngredients
+                // Pass null for uniqueIngredients as we're not pre-selecting ingredients
+                Bill_Medical bill = new Bill_Medical(recipe, null);
+
+                // Add bill to stack FIRST
                 pawn.BillStack.AddBill(bill);
-                bill.recipe = recipe;
+
+                // THEN set the body part (must be done after adding to stack)
                 bill.Part = part;
 
                 ClipboardHelper.CopyToClipboard($"Added operation: {recipe.LabelCap.ToString().StripTags()}");

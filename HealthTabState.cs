@@ -23,7 +23,9 @@ namespace RimWorldAccess
             CapacityDetail,        // Level 3b: View capacity details
             OperationsList,        // Level 2c: List operations
             OperationActions,      // Level 3c: Actions for operation
-            AddOperationList,      // Level 3d: List available operations to add
+            AddOperationList,      // Level 3d: List available operations to add (DEPRECATED - use AddRecipeList)
+            AddRecipeList,         // Level 3d: List available recipes to add
+            SelectBodyPart,        // Level 4d: Select body part for recipe
             BodyPartsList,         // Level 2d: List body parts
             HediffsList,           // Level 3e: List hediffs on a part
             HediffDetail           // Level 4e: View hediff details
@@ -51,7 +53,12 @@ namespace RimWorldAccess
         // Operations
         private static List<Bill> queuedOperations = new List<Bill>();
         private static List<HealthTabHelper.OperationInfo> availableOperations = new List<HealthTabHelper.OperationInfo>();
+        private static List<RecipeDef> availableRecipes = new List<RecipeDef>();
+        private static RecipeDef selectedRecipe = null;
+        private static List<BodyPartRecord> partsForRecipe = new List<BodyPartRecord>();
         private static int operationIndex = 0;
+        private static int recipeIndex = 0;
+        private static int partSelectionIndex = 0;
         private static readonly List<string> operationActions = new List<string> { "View Details", "Remove Operation", "Go Back" };
         private static int operationActionIndex = 0;
 
@@ -171,6 +178,16 @@ namespace RimWorldAccess
                         operationIndex = (operationIndex + 1) % availableOperations.Count;
                     break;
 
+                case MenuLevel.AddRecipeList:
+                    if (availableRecipes.Count > 0)
+                        recipeIndex = (recipeIndex + 1) % availableRecipes.Count;
+                    break;
+
+                case MenuLevel.SelectBodyPart:
+                    if (partsForRecipe.Count > 0)
+                        partSelectionIndex = (partSelectionIndex + 1) % partsForRecipe.Count;
+                    break;
+
                 case MenuLevel.BodyPartsList:
                     if (bodyParts.Count > 0)
                         bodyPartIndex = (bodyPartIndex + 1) % bodyParts.Count;
@@ -226,6 +243,16 @@ namespace RimWorldAccess
                 case MenuLevel.AddOperationList:
                     if (availableOperations.Count > 0)
                         operationIndex = (operationIndex - 1 + availableOperations.Count) % availableOperations.Count;
+                    break;
+
+                case MenuLevel.AddRecipeList:
+                    if (availableRecipes.Count > 0)
+                        recipeIndex = (recipeIndex - 1 + availableRecipes.Count) % availableRecipes.Count;
+                    break;
+
+                case MenuLevel.SelectBodyPart:
+                    if (partsForRecipe.Count > 0)
+                        partSelectionIndex = (partSelectionIndex - 1 + partsForRecipe.Count) % partsForRecipe.Count;
                     break;
 
                 case MenuLevel.BodyPartsList:
@@ -363,15 +390,15 @@ namespace RimWorldAccess
                     else
                     {
                         // "Add Operation" selected
-                        availableOperations = HealthTabHelper.GetAvailableOperations(currentPawn);
-                        if (availableOperations.Count == 0)
+                        availableRecipes = HealthTabHelper.GetAvailableRecipes(currentPawn);
+                        if (availableRecipes.Count == 0)
                         {
                             ClipboardHelper.CopyToClipboard("No operations available");
                             SoundDefOf.ClickReject.PlayOneShotOnCamera();
                             return;
                         }
-                        currentLevel = MenuLevel.AddOperationList;
-                        operationIndex = 0;
+                        currentLevel = MenuLevel.AddRecipeList;
+                        recipeIndex = 0;
                         SoundDefOf.Click.PlayOneShotOnCamera();
                         AnnounceCurrentSelection();
                     }
@@ -423,6 +450,71 @@ namespace RimWorldAccess
                         else
                         {
                             ClipboardHelper.CopyToClipboard($"Cannot add: {op.UnavailableReason}");
+                            SoundDefOf.ClickReject.PlayOneShotOnCamera();
+                        }
+                    }
+                    break;
+
+                case MenuLevel.AddRecipeList:
+                    if (recipeIndex >= 0 && recipeIndex < availableRecipes.Count)
+                    {
+                        selectedRecipe = availableRecipes[recipeIndex];
+
+                        // Get parts that this recipe can apply to
+                        partsForRecipe = HealthTabHelper.GetPartsForRecipe(currentPawn, selectedRecipe);
+
+                        if (partsForRecipe.Count == 0)
+                        {
+                            // Recipe doesn't require a specific part, add it directly
+                            if (selectedRecipe.Worker.AvailableOnNow(currentPawn, null))
+                            {
+                                HealthTabHelper.AddOperation(currentPawn, selectedRecipe, null);
+                                queuedOperations = HealthTabHelper.GetQueuedOperations(currentPawn);
+                                currentLevel = MenuLevel.OperationsList;
+                                operationIndex = 0;
+                                AnnounceCurrentSelection();
+                            }
+                            else
+                            {
+                                ClipboardHelper.CopyToClipboard("This operation is not available");
+                                SoundDefOf.ClickReject.PlayOneShotOnCamera();
+                            }
+                        }
+                        else if (partsForRecipe.Count == 1)
+                        {
+                            // Only one valid part, add operation directly
+                            HealthTabHelper.AddOperation(currentPawn, selectedRecipe, partsForRecipe[0]);
+                            queuedOperations = HealthTabHelper.GetQueuedOperations(currentPawn);
+                            currentLevel = MenuLevel.OperationsList;
+                            operationIndex = 0;
+                            AnnounceCurrentSelection();
+                        }
+                        else
+                        {
+                            // Multiple parts available, let user choose
+                            currentLevel = MenuLevel.SelectBodyPart;
+                            partSelectionIndex = 0;
+                            SoundDefOf.Click.PlayOneShotOnCamera();
+                            AnnounceCurrentSelection();
+                        }
+                    }
+                    break;
+
+                case MenuLevel.SelectBodyPart:
+                    if (partSelectionIndex >= 0 && partSelectionIndex < partsForRecipe.Count)
+                    {
+                        var selectedPart = partsForRecipe[partSelectionIndex];
+                        if (selectedRecipe.Worker.AvailableOnNow(currentPawn, selectedPart))
+                        {
+                            HealthTabHelper.AddOperation(currentPawn, selectedRecipe, selectedPart);
+                            queuedOperations = HealthTabHelper.GetQueuedOperations(currentPawn);
+                            currentLevel = MenuLevel.OperationsList;
+                            operationIndex = 0;
+                            AnnounceCurrentSelection();
+                        }
+                        else
+                        {
+                            ClipboardHelper.CopyToClipboard("This operation is not available on this body part");
                             SoundDefOf.ClickReject.PlayOneShotOnCamera();
                         }
                     }
@@ -494,7 +586,14 @@ namespace RimWorldAccess
 
                 case MenuLevel.OperationActions:
                 case MenuLevel.AddOperationList:
+                case MenuLevel.AddRecipeList:
                     currentLevel = MenuLevel.OperationsList;
+                    SoundDefOf.Click.PlayOneShotOnCamera();
+                    AnnounceCurrentSelection();
+                    break;
+
+                case MenuLevel.SelectBodyPart:
+                    currentLevel = MenuLevel.AddRecipeList;
                     SoundDefOf.Click.PlayOneShotOnCamera();
                     AnnounceCurrentSelection();
                     break;
@@ -628,6 +727,51 @@ namespace RimWorldAccess
                         }
                         sb.AppendLine($"Operation {operationIndex + 1} of {availableOperations.Count}");
                         sb.AppendLine("Press Enter to add, Escape to go back");
+                    }
+                    break;
+
+                case MenuLevel.AddRecipeList:
+                    if (recipeIndex >= 0 && recipeIndex < availableRecipes.Count)
+                    {
+                        var recipe = availableRecipes[recipeIndex];
+                        sb.AppendLine($"{recipe.LabelCap.ToString().StripTags()}");
+
+                        if (!string.IsNullOrEmpty(recipe.description))
+                        {
+                            sb.AppendLine(recipe.description);
+                        }
+
+                        // Show ingredient requirements
+                        if (recipe.ingredients != null && recipe.ingredients.Count > 0)
+                        {
+                            sb.Append("Requires: ");
+                            foreach (var ingredient in recipe.ingredients)
+                            {
+                                sb.Append($"{ingredient.Summary}, ");
+                            }
+                            sb.Length -= 2; // Remove trailing ", "
+                            sb.AppendLine();
+                        }
+
+                        sb.AppendLine($"Recipe {recipeIndex + 1} of {availableRecipes.Count}");
+                        sb.AppendLine("Press Enter to select, Escape to go back");
+                    }
+                    break;
+
+                case MenuLevel.SelectBodyPart:
+                    if (partSelectionIndex >= 0 && partSelectionIndex < partsForRecipe.Count)
+                    {
+                        var part = partsForRecipe[partSelectionIndex];
+                        sb.AppendLine($"{selectedRecipe.LabelCap.ToString().StripTags()}");
+                        sb.AppendLine($"Body part: {part.Label}");
+
+                        // Show health information about the part
+                        float health = currentPawn.health.hediffSet.GetPartHealth(part);
+                        float maxHealth = part.def.GetMaxHealth(currentPawn);
+                        sb.AppendLine($"Health: {health:F0} / {maxHealth:F0}");
+
+                        sb.AppendLine($"Part {partSelectionIndex + 1} of {partsForRecipe.Count}");
+                        sb.AppendLine("Press Enter to add operation, Escape to go back");
                     }
                     break;
 
