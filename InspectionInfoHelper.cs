@@ -245,36 +245,12 @@ namespace RimWorldAccess
             sb.AppendLine();
 
             // Get the inspect string (current activity, status)
+            // This already includes age, gender, faction, equipped items, and current activity
             string inspectString = pawn.GetInspectString();
             if (!string.IsNullOrEmpty(inspectString))
             {
                 sb.AppendLine(inspectString);
-                sb.AppendLine();
             }
-
-            // Basic info
-            if (pawn.RaceProps.Humanlike)
-            {
-                if (pawn.story != null)
-                {
-                    sb.AppendLine($"Age: {pawn.ageTracker.AgeBiologicalYears}");
-                    if (pawn.gender != Gender.None)
-                        sb.AppendLine($"Gender: {pawn.gender}");
-                }
-            }
-            else
-            {
-                sb.AppendLine($"Animal: {pawn.def.label}");
-                sb.AppendLine($"Age: {pawn.ageTracker.AgeBiologicalYears}");
-            }
-
-            // Health summary
-            if (pawn.Dead)
-                sb.AppendLine("Status: Dead");
-            else if (pawn.Downed)
-                sb.AppendLine("Status: Downed");
-            else if (pawn.health?.summaryHealth?.SummaryHealthPercent != null)
-                sb.AppendLine($"Health: {pawn.health.summaryHealth.SummaryHealthPercent:P0}");
 
             return sb.ToString();
         }

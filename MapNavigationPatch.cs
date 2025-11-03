@@ -52,7 +52,8 @@ namespace RimWorldAccess
                 BedAssignmentState.IsActive ||
                 WindowlessResearchMenuState.IsActive ||
                 WindowlessResearchDetailState.IsActive ||
-                WindowlessInspectionState.IsActive;
+                WindowlessInspectionState.IsActive ||
+                HealthTabState.IsActive;
         }
 
         /// <summary>

@@ -87,6 +87,49 @@ namespace RimWorldAccess
         }
 
         /// <summary>
+        /// Opens directly to the Operations section.
+        /// </summary>
+        public static void OpenOperations(Pawn pawn)
+        {
+            if (pawn == null)
+                return;
+
+            currentPawn = pawn;
+            isActive = true;
+            currentLevel = MenuLevel.OperationsList;
+            operationIndex = 0;
+
+            // Build operations list
+            queuedOperations.Clear();
+            availableOperations.Clear();
+
+            if (currentPawn.BillStack != null)
+            {
+                queuedOperations.AddRange(currentPawn.BillStack.Bills);
+            }
+
+            SoundDefOf.TabOpen.PlayOneShotOnCamera();
+            AnnounceCurrentSelection();
+        }
+
+        /// <summary>
+        /// Opens directly to the Medical Settings section.
+        /// </summary>
+        public static void OpenMedicalSettings(Pawn pawn)
+        {
+            if (pawn == null)
+                return;
+
+            currentPawn = pawn;
+            isActive = true;
+            currentLevel = MenuLevel.MedicalSettingsList;
+            medicalSettingIndex = 0;
+
+            SoundDefOf.TabOpen.PlayOneShotOnCamera();
+            AnnounceCurrentSelection();
+        }
+
+        /// <summary>
         /// Closes the health tab.
         /// </summary>
         public static void Close()

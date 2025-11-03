@@ -562,6 +562,15 @@ namespace RimWorldAccess
                 }
             }
 
+            // ===== PRIORITY 4.81: Handle health tab if active =====
+            if (HealthTabState.IsActive)
+            {
+                if (HealthTabState.HandleInput(Event.current))
+                {
+                    return;
+                }
+            }
+
             // ===== PRIORITY 4.85: Handle prisoner tab if active =====
             if (PrisonerTabState.IsActive)
             {
@@ -669,7 +678,8 @@ namespace RimWorldAccess
                                     WindowlessScheduleState.IsActive ||
                                     WindowlessResearchMenuState.IsActive ||
                                     StorytellerSelectionState.IsActive ||
-                                    PrisonerTabState.IsActive;
+                                    PrisonerTabState.IsActive ||
+                                    HealthTabState.IsActive;
 
                 if (!anyMenuActive)
                 {
