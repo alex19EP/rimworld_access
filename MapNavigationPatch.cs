@@ -18,6 +18,43 @@ namespace RimWorldAccess
         private static int lastProcessedFrame = -1;
 
         /// <summary>
+        /// Updates the map navigation suppression flag based on active menus.
+        /// </summary>
+        private static void UpdateSuppressionFlag()
+        {
+            // Suppress map navigation if ANY menu that uses arrow keys is active
+            MapNavigationState.SuppressMapNavigation =
+                WindowlessFloatMenuState.IsActive ||
+                WindowlessPauseMenuState.IsActive ||
+                JumpMenuState.IsActive ||
+                NotificationMenuState.IsActive ||
+                WindowlessSaveMenuState.IsActive ||
+                WindowlessConfirmationState.IsActive ||
+                WindowlessDeleteConfirmationState.IsActive ||
+                WindowlessOptionsMenuState.IsActive ||
+                StorageSettingsMenuState.IsActive ||
+                PlantSelectionMenuState.IsActive ||
+                RangeEditMenuState.IsActive ||
+                WorkMenuState.IsActive ||
+                AssignMenuState.IsActive ||
+                WindowlessOutfitPolicyState.IsActive ||
+                WindowlessFoodPolicyState.IsActive ||
+                WindowlessDrugPolicyState.IsActive ||
+                WindowlessAreaState.IsActive ||
+                WindowlessScheduleState.IsActive ||
+                BuildingInspectState.IsActive ||
+                BillsMenuState.IsActive ||
+                PrisonerTabState.IsActive ||
+                BillConfigState.IsActive ||
+                ThingFilterMenuState.IsActive ||
+                TempControlMenuState.IsActive ||
+                BedAssignmentState.IsActive ||
+                WindowlessResearchMenuState.IsActive ||
+                WindowlessResearchDetailState.IsActive ||
+                WindowlessInspectionState.IsActive;
+        }
+
+        /// <summary>
         /// Prefix patch that intercepts arrow key input before the camera's normal panning behavior.
         /// </summary>
         [HarmonyPrefix]
@@ -25,6 +62,9 @@ namespace RimWorldAccess
         {
             // Reset per-frame flag
             hasAnnouncedThisFrame = false;
+
+            // Update suppression flag based on active menus
+            UpdateSuppressionFlag();
 
             // Only process input during normal gameplay with a valid map
             if (Find.CurrentMap == null)
@@ -39,161 +79,8 @@ namespace RimWorldAccess
                 return;
             }
 
-            // Don't process arrow keys if the windowless orders menu is active
-            if (WindowlessFloatMenuState.IsActive)
-            {
-                return;
-            }
-            // Don't process arrow keys if the pause menu is active
-            if (WindowlessPauseMenuState.IsActive)
-            {
-                return;
-            }
-            // Don't process arrow keys if the jump menu is active
-            if (JumpMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if the save/load menu is active
-            if (WindowlessSaveMenuState.IsActive)
-            {
-                return;
-            }
-            // Don't process arrow keys if any confirmation dialog is active
-            if (WindowlessConfirmationState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if delete confirmation is active
-            if (WindowlessDeleteConfirmationState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if options menu is active
-            if (WindowlessOptionsMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if storage settings menu is active
-            if (StorageSettingsMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if plant selection menu is active
-            if (PlantSelectionMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if range edit submenu is active
-            if (RangeEditMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if the work menu is active
-            if (WorkMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if the assign menu is active
-            if (AssignMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if the outfit policy editor is active
-            if (WindowlessOutfitPolicyState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if the food policy editor is active
-            if (WindowlessFoodPolicyState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if the drug policy editor is active
-            if (WindowlessDrugPolicyState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if the area manager is active
-            if (WindowlessAreaState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if the schedule menu is active
-            if (WindowlessScheduleState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if building inspect menu is active
-            if (BuildingInspectState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if bills menu is active
-            if (BillsMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if prisoner tab is active
-            if (PrisonerTabState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if bill config menu is active
-            if (BillConfigState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if thing filter menu is active
-            if (ThingFilterMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if temperature control menu is active
-            if (TempControlMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if bed assignment menu is active
-            if (BedAssignmentState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if research menu is active
-            if (WindowlessResearchMenuState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if research detail view is active
-            if (WindowlessResearchDetailState.IsActive)
-            {
-                return;
-            }
-
-            // Don't process arrow keys if inspection menu is active
-            if (WindowlessInspectionState.IsActive)
+            // Don't process arrow keys if map navigation is suppressed (e.g., when menus are open)
+            if (MapNavigationState.SuppressMapNavigation)
             {
                 return;
             }

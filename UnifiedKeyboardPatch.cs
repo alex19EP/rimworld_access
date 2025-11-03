@@ -10,7 +10,7 @@ namespace RimWorldAccess
 {
     /// <summary>
     /// Unified Harmony patch for UIRoot.UIRootOnGUI to handle all keyboard accessibility features.
-    /// Handles: Escape key for pause menu, Enter key for building inspection/beds, ] key for colonist orders, I key for inspection menu, J key for jump menu, Alt+M for mood info, S for schedule, and all windowless menu navigation.
+    /// Handles: Escape key for pause menu, Enter key for building inspection/beds, ] key for colonist orders, I key for inspection menu, J key for jump menu, L key for notification menu, Alt+M for mood info, S for schedule, and all windowless menu navigation.
     /// </summary>
     [HarmonyPatch(typeof(UIRoot))]
     [HarmonyPatch("UIRootOnGUI")]
@@ -467,6 +467,39 @@ namespace RimWorldAccess
                 }
             }
 
+            // ===== PRIORITY 4.77: Handle notification menu if active =====
+            if (NotificationMenuState.IsActive)
+            {
+                bool handled = false;
+
+                if (key == KeyCode.DownArrow)
+                {
+                    NotificationMenuState.SelectNext();
+                    handled = true;
+                }
+                else if (key == KeyCode.UpArrow)
+                {
+                    NotificationMenuState.SelectPrevious();
+                    handled = true;
+                }
+                else if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
+                {
+                    NotificationMenuState.OpenDetailOrJump();
+                    handled = true;
+                }
+                else if (key == KeyCode.Escape)
+                {
+                    NotificationMenuState.GoBack();
+                    handled = true;
+                }
+
+                if (handled)
+                {
+                    Event.current.Use();
+                    return;
+                }
+            }
+
             // ===== PRIORITY 4.8: Handle inspection menu if active =====
             if (WindowlessInspectionState.IsActive)
             {
@@ -571,6 +604,7 @@ namespace RimWorldAccess
                                     ArchitectState.IsActive ||
                                     ZoneCreationState.IsInCreationMode ||
                                     JumpMenuState.IsActive ||
+                                    NotificationMenuState.IsActive ||
                                     WindowlessFloatMenuState.IsActive ||
                                     WindowlessPauseMenuState.IsActive ||
                                     WindowlessSaveMenuState.IsActive ||
@@ -784,6 +818,27 @@ namespace RimWorldAccess
 
                     // Open the jump menu
                     JumpMenuState.Open();
+                    return;
+                }
+            }
+
+            // ===== PRIORITY 7.1: Open notification menu with L key (if no menu is active and we're in-game) =====
+            if (key == KeyCode.L)
+            {
+                // Only open notification menu if:
+                // 1. We're in gameplay (not at main menu)
+                // 2. No windows are preventing camera motion (means a dialog is open)
+                // 3. Not in zone creation mode
+                if (Current.ProgramState == ProgramState.Playing &&
+                    Find.CurrentMap != null &&
+                    (Find.WindowStack == null || !Find.WindowStack.WindowsPreventCameraMotion) &&
+                    !ZoneCreationState.IsInCreationMode)
+                {
+                    // Prevent the default L key behavior
+                    Event.current.Use();
+
+                    // Open the notification menu
+                    NotificationMenuState.Open();
                     return;
                 }
             }

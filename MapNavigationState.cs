@@ -11,6 +11,7 @@ namespace RimWorldAccess
         private static IntVec3 currentCursorPosition = IntVec3.Invalid;
         private static string lastAnnouncedInfo = "";
         private static bool isInitialized = false;
+        private static bool suppressMapNavigation = false;
 
         /// <summary>
         /// Gets or sets the current cursor position on the map.
@@ -37,6 +38,16 @@ namespace RimWorldAccess
         {
             get => isInitialized;
             set => isInitialized = value;
+        }
+
+        /// <summary>
+        /// Gets or sets whether map navigation should be suppressed (e.g., when menus are open).
+        /// When true, arrow keys will not move the map cursor.
+        /// </summary>
+        public static bool SuppressMapNavigation
+        {
+            get => suppressMapNavigation;
+            set => suppressMapNavigation = value;
         }
 
         /// <summary>
