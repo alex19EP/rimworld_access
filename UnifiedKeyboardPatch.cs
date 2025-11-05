@@ -10,7 +10,7 @@ namespace RimWorldAccess
 {
     /// <summary>
     /// Unified Harmony patch for UIRoot.UIRootOnGUI to handle all keyboard accessibility features.
-    /// Handles: Escape key for pause menu, Enter key for building inspection/beds, ] key for colonist orders, I key for inspection menu, J key for jump menu, L key for notification menu, Q key for quest menu, Alt+M for mood info, S for schedule, and all windowless menu navigation.
+    /// Handles: Escape key for pause menu, Enter key for building inspection/beds, ] key for colonist orders, I key for inspection menu, J key for jump menu, L key for notification menu, Q key for quest menu, Alt+M for mood info, Alt+H for health info, Alt+N for needs info, S for schedule, and all windowless menu navigation.
     /// </summary>
     [HarmonyPatch(typeof(UIRoot))]
     [HarmonyPatch("UIRootOnGUI")]
@@ -794,6 +794,48 @@ namespace RimWorldAccess
                     MoodState.DisplayMoodInfo();
 
                     // Prevent the default M key behavior
+                    Event.current.Use();
+                    return;
+                }
+            }
+
+            // ===== PRIORITY 6.51: Display health info with Alt+H (if pawn is selected) =====
+            if (key == KeyCode.H && Event.current.alt)
+            {
+                // Only display health if:
+                // 1. We're in gameplay (not at main menu)
+                // 2. No windows are preventing camera motion (means a dialog is open)
+                // 3. Not in zone creation mode
+                if (Current.ProgramState == ProgramState.Playing &&
+                    Find.CurrentMap != null &&
+                    (Find.WindowStack == null || !Find.WindowStack.WindowsPreventCameraMotion) &&
+                    !ZoneCreationState.IsInCreationMode)
+                {
+                    // Display health information
+                    HealthState.DisplayHealthInfo();
+
+                    // Prevent the default H key behavior
+                    Event.current.Use();
+                    return;
+                }
+            }
+
+            // ===== PRIORITY 6.52: Display needs info with Alt+N (if pawn is selected) =====
+            if (key == KeyCode.N && Event.current.alt)
+            {
+                // Only display needs if:
+                // 1. We're in gameplay (not at main menu)
+                // 2. No windows are preventing camera motion (means a dialog is open)
+                // 3. Not in zone creation mode
+                if (Current.ProgramState == ProgramState.Playing &&
+                    Find.CurrentMap != null &&
+                    (Find.WindowStack == null || !Find.WindowStack.WindowsPreventCameraMotion) &&
+                    !ZoneCreationState.IsInCreationMode)
+                {
+                    // Display needs information
+                    NeedsState.DisplayNeedsInfo();
+
+                    // Prevent the default N key behavior
                     Event.current.Use();
                     return;
                 }
