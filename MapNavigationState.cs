@@ -10,7 +10,9 @@ namespace RimWorldAccess
     {
         Terrain,    // Jump by terrain type (original behavior)
         Buildings,  // Jump to buildings (walls, doors, etc.)
-        Geysers     // Jump to steam geysers
+        Geysers,           // Jump to steam geysers
+        HarvestableTrees,  // Jump to harvestable trees
+        MinableTiles       // Jump to mineable resources (ore, stone chunks)
     }
 
     /// <summary>
@@ -63,7 +65,7 @@ namespace RimWorldAccess
         }
 
         /// <summary>
-        /// Gets the current jump mode (terrain, buildings, or geysers).
+        /// Gets the current jump mode (terrain, buildings, geysers, harvestable trees, or mineable tiles).
         /// </summary>
         public static JumpMode CurrentJumpMode => currentJumpMode;
 
@@ -72,7 +74,7 @@ namespace RimWorldAccess
         /// </summary>
         public static void CycleJumpModeForward()
         {
-            currentJumpMode = (JumpMode)(((int)currentJumpMode + 1) % 3);
+            currentJumpMode = (JumpMode)(((int)currentJumpMode + 1) % 5);
             AnnounceJumpMode();
         }
 
@@ -81,7 +83,7 @@ namespace RimWorldAccess
         /// </summary>
         public static void CycleJumpModeBackward()
         {
-            currentJumpMode = (JumpMode)(((int)currentJumpMode + 2) % 3);
+            currentJumpMode = (JumpMode)(((int)currentJumpMode + 4) % 5);
             AnnounceJumpMode();
         }
 
@@ -102,6 +104,14 @@ namespace RimWorldAccess
             else if (currentJumpMode == JumpMode.Geysers)
             {
                 modeText = "Jump mode: Geysers";
+            }
+            else if (currentJumpMode == JumpMode.HarvestableTrees)
+            {
+                modeText = "Jump mode: Harvestable Trees";
+            }
+            else if (currentJumpMode == JumpMode.MinableTiles)
+            {
+                modeText = "Jump mode: Mineable Tiles";
             }
             else
             {
@@ -355,6 +365,142 @@ namespace RimWorldAccess
             {
                 if (thing is Building_SteamGeyser)
                     return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Jumps to the next harvestable tree in the specified direction.
+        /// Returns true if the position changed.
+        /// </summary>
+        public static bool JumpToNextHarvestableTrees(IntVec3 direction, Map map)
+        {
+            if (map == null || !isInitialized)
+                return false;
+
+            IntVec3 searchPosition = currentCursorPosition;
+
+            // Search in the specified direction until we find a harvestable tree
+            // Limit search to prevent infinite loops
+            int maxSteps = UnityEngine.Mathf.Max(map.Size.x, map.Size.z);
+
+            for (int step = 0; step < maxSteps; step++)
+            {
+                // Move one step in the direction
+                searchPosition += direction;
+
+                // Check if we're still within map bounds
+                if (!searchPosition.InBounds(map))
+                {
+                    // Hit map boundary, clamp to edge and stop
+                    searchPosition.x = UnityEngine.Mathf.Clamp(searchPosition.x, 0, map.Size.x - 1);
+                    searchPosition.z = UnityEngine.Mathf.Clamp(searchPosition.z, 0, map.Size.z - 1);
+                    break;
+                }
+
+                // Check if this tile has a harvestable tree
+                if (HasHarvestableTrees(searchPosition, map))
+                {
+                    // Found a harvestable tree, stop searching
+                    break;
+                }
+            }
+
+            // Update position if we moved
+            if (searchPosition != currentCursorPosition)
+            {
+                currentCursorPosition = searchPosition;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Jumps to the next mineable tile in the specified direction.
+        /// Returns true if the position changed.
+        /// </summary>
+        public static bool JumpToNextMinableTiles(IntVec3 direction, Map map)
+        {
+            if (map == null || !isInitialized)
+                return false;
+
+            IntVec3 searchPosition = currentCursorPosition;
+
+            // Search in the specified direction until we find a mineable tile
+            // Limit search to prevent infinite loops
+            int maxSteps = UnityEngine.Mathf.Max(map.Size.x, map.Size.z);
+
+            for (int step = 0; step < maxSteps; step++)
+            {
+                // Move one step in the direction
+                searchPosition += direction;
+
+                // Check if we're still within map bounds
+                if (!searchPosition.InBounds(map))
+                {
+                    // Hit map boundary, clamp to edge and stop
+                    searchPosition.x = UnityEngine.Mathf.Clamp(searchPosition.x, 0, map.Size.x - 1);
+                    searchPosition.z = UnityEngine.Mathf.Clamp(searchPosition.z, 0, map.Size.z - 1);
+                    break;
+                }
+
+                // Check if this tile has mineable resources
+                if (HasMineableTiles(searchPosition, map))
+                {
+                    // Found a mineable tile, stop searching
+                    break;
+                }
+            }
+
+            // Update position if we moved
+            if (searchPosition != currentCursorPosition)
+            {
+                currentCursorPosition = searchPosition;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if a tile has harvestable trees.
+        /// A tree is considered harvestable if it's a plant, is a tree type,
+        /// is harvestable now, and is not a stump.
+        /// </summary>
+        private static bool HasHarvestableTrees(IntVec3 position, Map map)
+        {
+            var things = position.GetThingList(map);
+            foreach (var thing in things)
+            {
+                if (thing is Plant plant)
+                {
+                    // Check if it's a tree that's ready for harvest
+                    if (plant.def.plant != null &&
+                        plant.def.plant.IsTree &&
+                        plant.HarvestableNow &&
+                        !plant.def.plant.isStump)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if a tile has mineable resources (ore, stone chunks, etc.).
+        /// </summary>
+        private static bool HasMineableTiles(IntVec3 position, Map map)
+        {
+            var things = position.GetThingList(map);
+            foreach (var thing in things)
+            {
+                // Check if the thing is marked as mineable
+                if (thing.def.mineable)
+                {
+                    return true;
+                }
             }
             return false;
         }

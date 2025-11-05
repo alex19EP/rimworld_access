@@ -194,6 +194,12 @@ namespace RimWorldAccess
                         case JumpMode.Geysers:
                             positionChanged = MapNavigationState.JumpToNextGeyser(moveOffset, Find.CurrentMap);
                             break;
+                        case JumpMode.HarvestableTrees:
+                            positionChanged = MapNavigationState.JumpToNextHarvestableTrees(moveOffset, Find.CurrentMap);
+                            break;
+                        case JumpMode.MinableTiles:
+                            positionChanged = MapNavigationState.JumpToNextMinableTiles(moveOffset, Find.CurrentMap);
+                            break;
                         default:
                             positionChanged = MapNavigationState.MoveCursor(moveOffset, Find.CurrentMap);
                             break;
