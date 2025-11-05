@@ -799,6 +799,27 @@ namespace RimWorldAccess
                 }
             }
 
+            // ===== PRIORITY 6.55: Announce time, date, and season with T key =====
+            if (key == KeyCode.T)
+            {
+                // Only announce time if:
+                // 1. We're in gameplay (not at main menu)
+                // 2. No windows are preventing camera motion (means a dialog is open)
+                // 3. Not in zone creation mode
+                if (Current.ProgramState == ProgramState.Playing &&
+                    Find.CurrentMap != null &&
+                    (Find.WindowStack == null || !Find.WindowStack.WindowsPreventCameraMotion) &&
+                    !ZoneCreationState.IsInCreationMode)
+                {
+                    // Announce time information
+                    TimeAnnouncementState.AnnounceTime();
+
+                    // Prevent the default T key behavior
+                    Event.current.Use();
+                    return;
+                }
+            }
+
             // ===== PRIORITY 6.6: Open windowless schedule menu with S key =====
             if (key == KeyCode.S)
             {
