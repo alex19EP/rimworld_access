@@ -59,7 +59,13 @@ namespace RimWorldAccess
             float latitude = longLat.y;
 
             // Get time components
-            int hour = GenDate.HourInteger(absTicks, longitude);
+            // DayTick returns ticks within the current day (0-59999)
+            // Each hour = 2500 ticks, so we can calculate hours and minutes
+            int dayTick = GenDate.DayTick(absTicks, longitude);
+            int totalMinutesInDay = Mathf.FloorToInt((float)dayTick / 2500f * 60f);
+            int hour = totalMinutesInDay / 60;
+            int minute = totalMinutesInDay % 60;
+
             int dayOfTwelfth = GenDate.DayOfTwelfth(absTicks, longitude);
             int year = GenDate.Year(absTicks, longitude);
             Season season = GenDate.Season(absTicks, longLat);
@@ -75,25 +81,25 @@ namespace RimWorldAccess
                 // 12-hour format
                 if (hour == 0)
                 {
-                    timeString = "12 AM";
+                    timeString = $"12:{minute:D2} AM";
                 }
                 else if (hour < 12)
                 {
-                    timeString = $"{hour} AM";
+                    timeString = $"{hour}:{minute:D2} AM";
                 }
                 else if (hour == 12)
                 {
-                    timeString = "12 PM";
+                    timeString = $"12:{minute:D2} PM";
                 }
                 else
                 {
-                    timeString = $"{hour - 12} PM";
+                    timeString = $"{hour - 12}:{minute:D2} PM";
                 }
             }
             else
             {
                 // 24-hour format
-                timeString = $"{hour}:00";
+                timeString = $"{hour:D2}:{minute:D2}";
             }
 
             sb.Append($"Time: {timeString}");
