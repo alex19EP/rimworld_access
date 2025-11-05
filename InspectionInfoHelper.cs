@@ -245,6 +245,17 @@ namespace RimWorldAccess
                 case "Work Priorities":
                     return PawnInfoHelper.GetWorkInfo(pawn);
 
+                case "Prisoner":
+                    if (pawn.IsPrisonerOfColony)
+                    {
+                        return PrisonerTabHelper.GetPrisonerInfo(pawn);
+                    }
+                    else if (pawn.IsSlaveOfColony)
+                    {
+                        return PrisonerTabHelper.GetSlaveInfo(pawn);
+                    }
+                    return "Not a prisoner or slave.";
+
                 default:
                     return "Category not found.";
             }

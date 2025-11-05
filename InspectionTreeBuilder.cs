@@ -184,14 +184,23 @@ namespace RimWorldAccess
         /// </summary>
         private static bool IsActionableCategory(object obj, string category)
         {
-            if (!(obj is Building building))
-                return false;
+            // Check for pawn-specific actionable categories
+            if (obj is Pawn pawn)
+            {
+                return category == "Prisoner" && (pawn.IsPrisonerOfColony || pawn.IsSlaveOfColony);
+            }
 
-            return (category == "Bills" && building is IBillGiver) ||
-                   (category == "Bed Assignment" && building is Building_Bed) ||
-                   (category == "Temperature" && building.TryGetComp<CompTempControl>() != null) ||
-                   (category == "Storage" && building is IStoreSettingsParent) ||
-                   BuildingComponentsHelper.GetDiscoverableComponents(building).Any(c => c.CategoryName == category && !c.IsReadOnly);
+            // Check for building-specific actionable categories
+            if (obj is Building building)
+            {
+                return (category == "Bills" && building is IBillGiver) ||
+                       (category == "Bed Assignment" && building is Building_Bed) ||
+                       (category == "Temperature" && building.TryGetComp<CompTempControl>() != null) ||
+                       (category == "Storage" && building is IStoreSettingsParent) ||
+                       BuildingComponentsHelper.GetDiscoverableComponents(building).Any(c => c.CategoryName == category && !c.IsReadOnly);
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -205,8 +214,7 @@ namespace RimWorldAccess
                    category == "Needs" ||
                    category == "Social" ||
                    category == "Training" ||
-                   category == "Character" ||
-                   category == "Prisoner";
+                   category == "Character";
         }
 
         /// <summary>
@@ -214,6 +222,18 @@ namespace RimWorldAccess
         /// </summary>
         private static void ExecuteCategoryAction(object obj, string category)
         {
+            // Handle pawn-specific actions
+            if (obj is Pawn pawn)
+            {
+                if (category == "Prisoner" && (pawn.IsPrisonerOfColony || pawn.IsSlaveOfColony))
+                {
+                    WindowlessInspectionState.Close();
+                    PrisonerTabState.Open(pawn);
+                    return;
+                }
+            }
+
+            // Handle building-specific actions
             if (!(obj is Building building))
                 return;
 
@@ -318,10 +338,6 @@ namespace RimWorldAccess
                 BuildDetailedInfoChildren(categoryItem, obj, category);
             }
             else if (category == "Character")
-            {
-                BuildDetailedInfoChildren(categoryItem, obj, category);
-            }
-            else if (category == "Prisoner")
             {
                 BuildDetailedInfoChildren(categoryItem, obj, category);
             }
