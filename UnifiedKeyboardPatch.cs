@@ -11,6 +11,7 @@ namespace RimWorldAccess
     /// <summary>
     /// Unified Harmony patch for UIRoot.UIRootOnGUI to handle all keyboard accessibility features.
     /// Handles: Escape key for pause menu, Enter key for building inspection/beds, ] key for colonist orders, I key for inspection menu, J key for jump menu, L key for notification menu, Q key for quest menu, Alt+M for mood info, Alt+H for health info, Alt+N for needs info, S for schedule, and all windowless menu navigation.
+    /// Note: Dialog navigation (including research completion dialogs) is handled by DialogAccessibilityPatch.
     /// </summary>
     [HarmonyPatch(typeof(UIRoot))]
     [HarmonyPatch("UIRootOnGUI")]
