@@ -1,7 +1,18 @@
 using Verse;
+using RimWorld;
 
 namespace RimWorldAccess
 {
+    /// <summary>
+    /// Defines the different types of objects that can be jumped to using Ctrl+Arrow keys.
+    /// </summary>
+    public enum JumpMode
+    {
+        Terrain,    // Jump by terrain type (original behavior)
+        Buildings,  // Jump to buildings (walls, doors, etc.)
+        Geysers     // Jump to steam geysers
+    }
+
     /// <summary>
     /// Maintains the state of map navigation for accessibility features.
     /// Tracks the current cursor position as the user navigates the map with arrow keys.
@@ -12,6 +23,7 @@ namespace RimWorldAccess
         private static string lastAnnouncedInfo = "";
         private static bool isInitialized = false;
         private static bool suppressMapNavigation = false;
+        private static JumpMode currentJumpMode = JumpMode.Terrain;
 
         /// <summary>
         /// Gets or sets the current cursor position on the map.
@@ -48,6 +60,54 @@ namespace RimWorldAccess
         {
             get => suppressMapNavigation;
             set => suppressMapNavigation = value;
+        }
+
+        /// <summary>
+        /// Gets the current jump mode (terrain, buildings, or geysers).
+        /// </summary>
+        public static JumpMode CurrentJumpMode => currentJumpMode;
+
+        /// <summary>
+        /// Cycles to the next jump mode and announces it.
+        /// </summary>
+        public static void CycleJumpModeForward()
+        {
+            currentJumpMode = (JumpMode)(((int)currentJumpMode + 1) % 3);
+            AnnounceJumpMode();
+        }
+
+        /// <summary>
+        /// Cycles to the previous jump mode and announces it.
+        /// </summary>
+        public static void CycleJumpModeBackward()
+        {
+            currentJumpMode = (JumpMode)(((int)currentJumpMode + 2) % 3);
+            AnnounceJumpMode();
+        }
+
+        /// <summary>
+        /// Announces the current jump mode to the user via clipboard.
+        /// </summary>
+        private static void AnnounceJumpMode()
+        {
+            string modeText;
+            if (currentJumpMode == JumpMode.Terrain)
+            {
+                modeText = "Jump mode: Terrain";
+            }
+            else if (currentJumpMode == JumpMode.Buildings)
+            {
+                modeText = "Jump mode: Buildings";
+            }
+            else if (currentJumpMode == JumpMode.Geysers)
+            {
+                modeText = "Jump mode: Geysers";
+            }
+            else
+            {
+                modeText = "Jump mode: Unknown";
+            }
+            ClipboardHelper.CopyToClipboard(modeText);
         }
 
         /// <summary>
@@ -161,6 +221,141 @@ namespace RimWorldAccess
                 return true;
             }
 
+            return false;
+        }
+
+        /// <summary>
+        /// Jumps to the next tile with a building (wall, door, etc.) in the specified direction.
+        /// Returns true if the position changed.
+        /// </summary>
+        public static bool JumpToNextBuilding(IntVec3 direction, Map map)
+        {
+            if (map == null || !isInitialized)
+                return false;
+
+            IntVec3 searchPosition = currentCursorPosition;
+
+            // Search in the specified direction until we find a building
+            // Limit search to prevent infinite loops
+            int maxSteps = UnityEngine.Mathf.Max(map.Size.x, map.Size.z);
+
+            for (int step = 0; step < maxSteps; step++)
+            {
+                // Move one step in the direction
+                searchPosition += direction;
+
+                // Check if we're still within map bounds
+                if (!searchPosition.InBounds(map))
+                {
+                    // Hit map boundary, clamp to edge and stop
+                    searchPosition.x = UnityEngine.Mathf.Clamp(searchPosition.x, 0, map.Size.x - 1);
+                    searchPosition.z = UnityEngine.Mathf.Clamp(searchPosition.z, 0, map.Size.z - 1);
+                    break;
+                }
+
+                // Check if this tile has a building (wall, door, or other structure)
+                if (HasRelevantBuilding(searchPosition, map))
+                {
+                    // Found a building, stop searching
+                    break;
+                }
+            }
+
+            // Update position if we moved
+            if (searchPosition != currentCursorPosition)
+            {
+                currentCursorPosition = searchPosition;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Jumps to the next steam geyser in the specified direction.
+        /// Returns true if the position changed.
+        /// </summary>
+        public static bool JumpToNextGeyser(IntVec3 direction, Map map)
+        {
+            if (map == null || !isInitialized)
+                return false;
+
+            IntVec3 searchPosition = currentCursorPosition;
+
+            // Search in the specified direction until we find a steam geyser
+            // Limit search to prevent infinite loops
+            int maxSteps = UnityEngine.Mathf.Max(map.Size.x, map.Size.z);
+
+            for (int step = 0; step < maxSteps; step++)
+            {
+                // Move one step in the direction
+                searchPosition += direction;
+
+                // Check if we're still within map bounds
+                if (!searchPosition.InBounds(map))
+                {
+                    // Hit map boundary, clamp to edge and stop
+                    searchPosition.x = UnityEngine.Mathf.Clamp(searchPosition.x, 0, map.Size.x - 1);
+                    searchPosition.z = UnityEngine.Mathf.Clamp(searchPosition.z, 0, map.Size.z - 1);
+                    break;
+                }
+
+                // Check if this tile has a steam geyser
+                if (HasSteamGeyser(searchPosition, map))
+                {
+                    // Found a geyser, stop searching
+                    break;
+                }
+            }
+
+            // Update position if we moved
+            if (searchPosition != currentCursorPosition)
+            {
+                currentCursorPosition = searchPosition;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if a tile has a relevant building (walls, doors, or other edifices).
+        /// </summary>
+        private static bool HasRelevantBuilding(IntVec3 position, Map map)
+        {
+            var things = position.GetThingList(map);
+            foreach (var thing in things)
+            {
+                // Check for buildings that are edifices (walls, doors, etc.)
+                if (thing is Building building)
+                {
+                    // Include doors explicitly
+                    if (building is Building_Door)
+                        return true;
+
+                    // Include walls and other structures that hold roofs or have high fill percent
+                    if (building.def.building != null && building.def.building.isEdifice)
+                    {
+                        // Walls typically have holdsRoof or high fillPercent
+                        if (building.def.holdsRoof || building.def.fillPercent >= 0.5f)
+                            return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if a tile has a steam geyser.
+        /// </summary>
+        private static bool HasSteamGeyser(IntVec3 position, Map map)
+        {
+            var things = position.GetThingList(map);
+            foreach (var thing in things)
+            {
+                if (thing is Building_SteamGeyser)
+                    return true;
+            }
             return false;
         }
     }

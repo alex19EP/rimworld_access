@@ -129,45 +129,75 @@ namespace RimWorldAccess
             // Check for arrow key input
             IntVec3 moveOffset = IntVec3.Zero;
             bool keyPressed = false;
-            bool isTerrainJump = false;
+            bool isJump = false;
 
-            // Check if Ctrl is held down for terrain jumping
+            // Check if Ctrl or Shift is held down
             bool ctrlHeld = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool shiftHeld = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+
+            // Handle Shift+Up/Down for jump mode cycling
+            if (shiftHeld && Input.GetKeyDown(KeyCode.UpArrow))
+            {
+                MapNavigationState.CycleJumpModeForward();
+                hasAnnouncedThisFrame = true;
+                return;
+            }
+            else if (shiftHeld && Input.GetKeyDown(KeyCode.DownArrow))
+            {
+                MapNavigationState.CycleJumpModeBackward();
+                hasAnnouncedThisFrame = true;
+                return;
+            }
 
             // Check each arrow key direction
             if (Input.GetKeyDown(KeyCode.UpArrow))
             {
                 moveOffset = IntVec3.North; // North is positive Z
                 keyPressed = true;
-                isTerrainJump = ctrlHeld;
+                isJump = ctrlHeld;
             }
             else if (Input.GetKeyDown(KeyCode.DownArrow))
             {
                 moveOffset = IntVec3.South; // South is negative Z
                 keyPressed = true;
-                isTerrainJump = ctrlHeld;
+                isJump = ctrlHeld;
             }
             else if (Input.GetKeyDown(KeyCode.LeftArrow))
             {
                 moveOffset = IntVec3.West; // West is negative X
                 keyPressed = true;
-                isTerrainJump = ctrlHeld;
+                isJump = ctrlHeld;
             }
             else if (Input.GetKeyDown(KeyCode.RightArrow))
             {
                 moveOffset = IntVec3.East; // East is positive X
                 keyPressed = true;
-                isTerrainJump = ctrlHeld;
+                isJump = ctrlHeld;
             }
 
             // If an arrow key was pressed, move the cursor and update camera
             if (keyPressed)
             {
-                // Move the cursor position - either terrain jump or normal movement
+                // Move the cursor position - either jump or normal movement
                 bool positionChanged;
-                if (isTerrainJump)
+                if (isJump)
                 {
-                    positionChanged = MapNavigationState.JumpToNextTerrainType(moveOffset, Find.CurrentMap);
+                    // Use appropriate jump method based on current jump mode
+                    switch (MapNavigationState.CurrentJumpMode)
+                    {
+                        case JumpMode.Terrain:
+                            positionChanged = MapNavigationState.JumpToNextTerrainType(moveOffset, Find.CurrentMap);
+                            break;
+                        case JumpMode.Buildings:
+                            positionChanged = MapNavigationState.JumpToNextBuilding(moveOffset, Find.CurrentMap);
+                            break;
+                        case JumpMode.Geysers:
+                            positionChanged = MapNavigationState.JumpToNextGeyser(moveOffset, Find.CurrentMap);
+                            break;
+                        default:
+                            positionChanged = MapNavigationState.MoveCursor(moveOffset, Find.CurrentMap);
+                            break;
+                    }
                 }
                 else
                 {
