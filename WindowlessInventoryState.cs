@@ -1,0 +1,571 @@
+using System;
+using System.Collections.Generic;
+using RimWorld;
+using UnityEngine;
+using Verse;
+using Verse.Sound;
+
+namespace RimWorldAccess
+{
+    /// <summary>
+    /// Manages the windowless colony-wide inventory menu (activated with 'I' key)
+    /// Displays all stored items organized by category with hierarchical navigation
+    /// </summary>
+    public static class WindowlessInventoryState
+    {
+        private static bool isActive = false;
+        private static List<TreeNode> rootNodes = new List<TreeNode>();
+        private static List<TreeNode> flattenedVisibleNodes = new List<TreeNode>();
+        private static int selectedIndex = 0;
+
+        public static bool IsActive => isActive;
+
+        /// <summary>
+        /// Represents a node in the inventory tree (category, item, or action)
+        /// </summary>
+        public class TreeNode
+        {
+            public enum NodeType
+            {
+                Category,      // A ThingCategoryDef
+                Item,          // An aggregated inventory item
+                Action         // An action (Jump to location, View details)
+            }
+
+            public NodeType Type { get; set; }
+            public string Label { get; set; }
+            public int Depth { get; set; }
+            public bool IsExpanded { get; set; }
+            public bool CanExpand { get; set; }
+
+            // For Category nodes
+            public InventoryHelper.CategoryNode CategoryData { get; set; }
+
+            // For Item nodes
+            public InventoryHelper.InventoryItem ItemData { get; set; }
+
+            // For Action nodes
+            public Action OnActivate { get; set; }
+
+            // Tree structure
+            public TreeNode Parent { get; set; }
+            public List<TreeNode> Children { get; set; }
+
+            public TreeNode()
+            {
+                Children = new List<TreeNode>();
+                IsExpanded = false;
+                CanExpand = false;
+            }
+
+            public string GetDisplayString()
+            {
+                string indent = new string(' ', Depth * 2);
+                string expandIndicator = "";
+
+                if (CanExpand)
+                {
+                    expandIndicator = IsExpanded ? "▼ " : "► ";
+                }
+
+                return $"{indent}{expandIndicator}{Label}";
+            }
+        }
+
+        /// <summary>
+        /// Opens the inventory menu and collects all colony storage data
+        /// </summary>
+        public static void Open()
+        {
+            if (Find.CurrentMap == null)
+            {
+                Log.Warning("WindowlessInventoryState: Cannot open - no current map");
+                return;
+            }
+
+            isActive = true;
+            selectedIndex = 0;
+
+            // Collect all stored items
+            List<Thing> allItems = InventoryHelper.GetAllStoredItems();
+
+            if (allItems.Count == 0)
+            {
+                ClipboardHelper.CopyToClipboard("Inventory menu opened. No items in colony storage.");
+                rootNodes = new List<TreeNode>();
+                flattenedVisibleNodes = new List<TreeNode>();
+                SoundDefOf.TabOpen.PlayOneShotOnCamera();
+                return;
+            }
+
+            // Aggregate items by type
+            Dictionary<ThingDef, InventoryHelper.InventoryItem> aggregatedItems = InventoryHelper.AggregateStacks(allItems);
+
+            // Build category tree
+            List<InventoryHelper.CategoryNode> categoryTree = InventoryHelper.BuildCategoryTree(aggregatedItems);
+
+            // Convert to TreeNode structure
+            rootNodes = BuildTreeNodes(categoryTree);
+
+            // Flatten to get initially visible nodes
+            RebuildFlattenedList();
+
+            // Announce opening
+            string announcement = $"Colony inventory opened. {aggregatedItems.Count} item types in storage. {rootNodes.Count} categories.";
+            ClipboardHelper.CopyToClipboard(announcement);
+            SoundDefOf.TabOpen.PlayOneShotOnCamera();
+
+            // Announce first selection
+            if (flattenedVisibleNodes.Count > 0)
+            {
+                AnnounceCurrentSelection();
+            }
+        }
+
+        /// <summary>
+        /// Converts InventoryHelper.CategoryNode tree to TreeNode tree
+        /// </summary>
+        private static List<TreeNode> BuildTreeNodes(List<InventoryHelper.CategoryNode> categoryNodes, TreeNode parent = null, int depth = 0)
+        {
+            List<TreeNode> nodes = new List<TreeNode>();
+
+            foreach (InventoryHelper.CategoryNode categoryNode in categoryNodes)
+            {
+                // Create category node
+                TreeNode catNode = new TreeNode
+                {
+                    Type = TreeNode.NodeType.Category,
+                    Label = categoryNode.GetDisplayLabel(),
+                    Depth = depth,
+                    CategoryData = categoryNode,
+                    Parent = parent,
+                    CanExpand = (categoryNode.SubCategories.Count > 0 || categoryNode.Items.Count > 0)
+                };
+
+                // Build children (subcategories)
+                if (categoryNode.SubCategories.Count > 0)
+                {
+                    catNode.Children.AddRange(BuildTreeNodes(categoryNode.SubCategories, catNode, depth + 1));
+                }
+
+                // Add items as children
+                foreach (InventoryHelper.InventoryItem item in categoryNode.Items)
+                {
+                    TreeNode itemNode = new TreeNode
+                    {
+                        Type = TreeNode.NodeType.Item,
+                        Label = item.GetDisplayLabel(),
+                        Depth = depth + 1,
+                        ItemData = item,
+                        Parent = catNode,
+                        CanExpand = true // Items can expand to show actions
+                    };
+
+                    // Build action children
+                    itemNode.Children.AddRange(BuildItemActionNodes(item, itemNode, depth + 2));
+
+                    catNode.Children.Add(itemNode);
+                }
+
+                nodes.Add(catNode);
+            }
+
+            return nodes;
+        }
+
+        /// <summary>
+        /// Builds action nodes for an inventory item
+        /// </summary>
+        private static List<TreeNode> BuildItemActionNodes(InventoryHelper.InventoryItem item, TreeNode parent, int depth)
+        {
+            List<TreeNode> actions = new List<TreeNode>();
+
+            // Action: Jump to location
+            if (item.StorageLocations.Count > 0)
+            {
+                TreeNode jumpAction = new TreeNode
+                {
+                    Type = TreeNode.NodeType.Action,
+                    Label = "Jump to location",
+                    Depth = depth,
+                    Parent = parent,
+                    CanExpand = false,
+                    OnActivate = () => JumpToItem(item)
+                };
+                actions.Add(jumpAction);
+            }
+
+            // Action: View details
+            TreeNode detailsAction = new TreeNode
+            {
+                Type = TreeNode.NodeType.Action,
+                Label = "View details",
+                Depth = depth,
+                Parent = parent,
+                CanExpand = false,
+                OnActivate = () => ViewItemDetails(item)
+            };
+            actions.Add(detailsAction);
+
+            return actions;
+        }
+
+        /// <summary>
+        /// Rebuilds the flattened list of visible nodes based on expansion states
+        /// </summary>
+        private static void RebuildFlattenedList()
+        {
+            flattenedVisibleNodes.Clear();
+            AddVisibleNodes(rootNodes);
+
+            // Clamp selection index
+            if (selectedIndex >= flattenedVisibleNodes.Count)
+            {
+                selectedIndex = Math.Max(0, flattenedVisibleNodes.Count - 1);
+            }
+        }
+
+        /// <summary>
+        /// Recursively adds visible nodes to the flattened list
+        /// </summary>
+        private static void AddVisibleNodes(List<TreeNode> nodes)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                flattenedVisibleNodes.Add(node);
+
+                if (node.IsExpanded && node.Children.Count > 0)
+                {
+                    AddVisibleNodes(node.Children);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Closes the inventory menu
+        /// </summary>
+        public static void Close()
+        {
+            isActive = false;
+            rootNodes.Clear();
+            flattenedVisibleNodes.Clear();
+            selectedIndex = 0;
+
+            ClipboardHelper.CopyToClipboard("Inventory menu closed.");
+            SoundDefOf.TabClose.PlayOneShotOnCamera();
+        }
+
+        /// <summary>
+        /// Handles keyboard input for the inventory menu
+        /// Returns true if the input was handled
+        /// </summary>
+        public static bool HandleInput(Event ev)
+        {
+            if (!isActive) return false;
+
+            KeyCode key = ev.keyCode;
+
+            // Up arrow - previous item
+            if (key == KeyCode.UpArrow)
+            {
+                ev.Use();
+                SelectPrevious();
+                return true;
+            }
+
+            // Down arrow - next item
+            if (key == KeyCode.DownArrow)
+            {
+                ev.Use();
+                SelectNext();
+                return true;
+            }
+
+            // Right arrow - expand current node
+            if (key == KeyCode.RightArrow)
+            {
+                ev.Use();
+                ExpandCurrent();
+                return true;
+            }
+
+            // Left arrow - collapse current node
+            if (key == KeyCode.LeftArrow)
+            {
+                ev.Use();
+                CollapseCurrent();
+                return true;
+            }
+
+            // Enter - activate current node
+            if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
+            {
+                ev.Use();
+                ActivateCurrent();
+                return true;
+            }
+
+            // Escape - close menu
+            if (key == KeyCode.Escape)
+            {
+                ev.Use();
+                Close();
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Selects the previous item in the list
+        /// </summary>
+        private static void SelectPrevious()
+        {
+            if (flattenedVisibleNodes.Count == 0) return;
+
+            selectedIndex--;
+            if (selectedIndex < 0)
+            {
+                selectedIndex = flattenedVisibleNodes.Count - 1; // Wrap to bottom
+            }
+
+            SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+            AnnounceCurrentSelection();
+        }
+
+        /// <summary>
+        /// Selects the next item in the list
+        /// </summary>
+        private static void SelectNext()
+        {
+            if (flattenedVisibleNodes.Count == 0) return;
+
+            selectedIndex++;
+            if (selectedIndex >= flattenedVisibleNodes.Count)
+            {
+                selectedIndex = 0; // Wrap to top
+            }
+
+            SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+            AnnounceCurrentSelection();
+        }
+
+        /// <summary>
+        /// Expands the currently selected node
+        /// </summary>
+        private static void ExpandCurrent()
+        {
+            if (flattenedVisibleNodes.Count == 0) return;
+
+            TreeNode current = flattenedVisibleNodes[selectedIndex];
+
+            if (current.CanExpand && !current.IsExpanded)
+            {
+                current.IsExpanded = true;
+                RebuildFlattenedList();
+                SoundDefOf.Click.PlayOneShotOnCamera();
+                ClipboardHelper.CopyToClipboard($"Expanded: {current.Label}");
+            }
+            else
+            {
+                ClipboardHelper.CopyToClipboard("Cannot expand this item.");
+            }
+        }
+
+        /// <summary>
+        /// Collapses the currently selected node
+        /// </summary>
+        private static void CollapseCurrent()
+        {
+            if (flattenedVisibleNodes.Count == 0) return;
+
+            TreeNode current = flattenedVisibleNodes[selectedIndex];
+
+            if (current.CanExpand && current.IsExpanded)
+            {
+                current.IsExpanded = false;
+                RebuildFlattenedList();
+                SoundDefOf.Click.PlayOneShotOnCamera();
+                ClipboardHelper.CopyToClipboard($"Collapsed: {current.Label}");
+            }
+            else if (current.Parent != null)
+            {
+                // Collapse parent instead
+                current.Parent.IsExpanded = false;
+                RebuildFlattenedList();
+
+                // Select the parent
+                selectedIndex = flattenedVisibleNodes.IndexOf(current.Parent);
+                if (selectedIndex < 0) selectedIndex = 0;
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+                ClipboardHelper.CopyToClipboard($"Collapsed parent: {current.Parent.Label}");
+            }
+            else
+            {
+                ClipboardHelper.CopyToClipboard("Cannot collapse this item.");
+            }
+        }
+
+        /// <summary>
+        /// Activates the currently selected node
+        /// </summary>
+        private static void ActivateCurrent()
+        {
+            if (flattenedVisibleNodes.Count == 0) return;
+
+            TreeNode current = flattenedVisibleNodes[selectedIndex];
+
+            // If it's an action, execute it
+            if (current.Type == TreeNode.NodeType.Action && current.OnActivate != null)
+            {
+                SoundDefOf.Click.PlayOneShotOnCamera();
+                current.OnActivate();
+                return;
+            }
+
+            // If it's a category or item, toggle expansion
+            if (current.CanExpand)
+            {
+                if (current.IsExpanded)
+                {
+                    CollapseCurrent();
+                }
+                else
+                {
+                    ExpandCurrent();
+                }
+            }
+            else
+            {
+                ClipboardHelper.CopyToClipboard("This item has no actions.");
+            }
+        }
+
+        /// <summary>
+        /// Announces the currently selected item via clipboard
+        /// </summary>
+        private static void AnnounceCurrentSelection()
+        {
+            if (flattenedVisibleNodes.Count == 0)
+            {
+                ClipboardHelper.CopyToClipboard("Inventory is empty.");
+                return;
+            }
+
+            TreeNode current = flattenedVisibleNodes[selectedIndex];
+            string typeInfo = "";
+
+            switch (current.Type)
+            {
+                case TreeNode.NodeType.Category:
+                    typeInfo = current.CanExpand ? (current.IsExpanded ? "[Expanded]" : "[Collapsed]") : "";
+                    break;
+                case TreeNode.NodeType.Item:
+                    typeInfo = current.IsExpanded ? "[Expanded]" : "[Collapsed]";
+                    break;
+                case TreeNode.NodeType.Action:
+                    typeInfo = ""; // No suffix for actions
+                    break;
+            }
+
+            string announcement = $"{current.Label} {typeInfo}".Trim();
+            ClipboardHelper.CopyToClipboard(announcement);
+        }
+
+        /// <summary>
+        /// Jumps the camera and cursor to the location of an item
+        /// </summary>
+        private static void JumpToItem(InventoryHelper.InventoryItem item)
+        {
+            if (item.StorageLocations.Count == 0)
+            {
+                ClipboardHelper.CopyToClipboard("No storage location found for this item.");
+                return;
+            }
+
+            IntVec3 location = item.StorageLocations[0];
+
+            // Jump camera
+            if (Find.CameraDriver != null)
+            {
+                Find.CameraDriver.JumpToCurrentMapLoc(location);
+            }
+
+            // Update map cursor if initialized
+            if (MapNavigationState.IsInitialized)
+            {
+                MapNavigationState.CurrentCursorPosition = location;
+            }
+
+            ClipboardHelper.CopyToClipboard($"Jumped to {item.Def.LabelCap} storage location at {location}.");
+            SoundDefOf.Click.PlayOneShotOnCamera();
+
+            // Close the inventory menu after jumping
+            Close();
+        }
+
+        /// <summary>
+        /// Views detailed information about an item
+        /// </summary>
+        private static void ViewItemDetails(InventoryHelper.InventoryItem item)
+        {
+            ThingDef def = item.Def;
+
+            // Build detailed description
+            List<string> details = new List<string>();
+            details.Add($"Item: {def.LabelCap}");
+            details.Add($"Total quantity: {item.TotalQuantity}");
+            details.Add($"Description: {def.description}");
+
+            if (def.stackLimit > 1)
+            {
+                details.Add($"Stack limit: {def.stackLimit}");
+            }
+
+            if (def.BaseMarketValue > 0)
+            {
+                details.Add($"Market value: ${def.BaseMarketValue:F2} each, ${def.BaseMarketValue * item.TotalQuantity:F2} total");
+            }
+
+            if (def.statBases != null && def.statBases.Count > 0)
+            {
+                details.Add($"Mass: {def.statBases.GetStatValueFromList(StatDefOf.Mass, 0):F2} kg");
+            }
+
+            details.Add($"Storage locations: {item.StorageLocations.Count}");
+
+            string announcement = string.Join(". ", details);
+            ClipboardHelper.CopyToClipboard(announcement);
+            SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        /// <summary>
+        /// Draws visual highlights for the selected item (for sighted users)
+        /// </summary>
+        public static void DrawHighlight()
+        {
+            if (!isActive || flattenedVisibleNodes.Count == 0) return;
+
+            TreeNode current = flattenedVisibleNodes[selectedIndex];
+
+            // Calculate position for highlight
+            float lineHeight = 24f;
+            float yOffset = selectedIndex * lineHeight;
+            float xOffset = 20f;
+            float width = 600f;
+            float height = lineHeight;
+
+            Rect highlightRect = new Rect(xOffset, yOffset + 100f, width, height);
+
+            // Draw semi-transparent highlight
+            Color highlightColor = new Color(1f, 1f, 0f, 0.3f); // Yellow with alpha
+            Widgets.DrawBoxSolid(highlightRect, highlightColor);
+
+            // Draw label
+            Text.Anchor = TextAnchor.MiddleLeft;
+            Widgets.Label(highlightRect, current.GetDisplayString());
+            Text.Anchor = TextAnchor.UpperLeft;
+        }
+    }
+}

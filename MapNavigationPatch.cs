@@ -53,6 +53,7 @@ namespace RimWorldAccess
                 WindowlessResearchMenuState.IsActive ||
                 WindowlessResearchDetailState.IsActive ||
                 WindowlessInspectionState.IsActive ||
+                WindowlessInventoryState.IsActive ||
                 HealthTabState.IsActive ||
                 FlickableComponentState.IsActive ||
                 RefuelableComponentState.IsActive ||

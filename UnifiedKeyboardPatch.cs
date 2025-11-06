@@ -572,6 +572,15 @@ namespace RimWorldAccess
                 }
             }
 
+            // ===== PRIORITY 4.805: Handle inventory menu if active =====
+            if (WindowlessInventoryState.IsActive)
+            {
+                if (WindowlessInventoryState.HandleInput(Event.current))
+                {
+                    return;
+                }
+            }
+
             // ===== PRIORITY 4.81: Handle health tab if active =====
             if (HealthTabState.IsActive)
             {
@@ -1022,8 +1031,8 @@ namespace RimWorldAccess
                 }
             }
 
-            // ===== PRIORITY 7.6: Open inspection menu with I key (if no menu is active and we're in-game) =====
-            if (key == KeyCode.I)
+            // ===== PRIORITY 7.6: Open inspection menu with lowercase 'i' key (DISABLED - replaced by inventory menu) =====
+            if (key == KeyCode.None) // Changed from KeyCode.I to disable this binding
             {
                 // Only open inspection menu if:
                 // 1. We're in gameplay (not at main menu)
@@ -1041,6 +1050,30 @@ namespace RimWorldAccess
 
                     // Open the inspection menu at the current cursor position
                     WindowlessInspectionState.Open(MapNavigationState.CurrentCursorPosition);
+                    return;
+                }
+            }
+
+            // ===== PRIORITY 7.6b: Open colony inventory menu with uppercase 'I' key =====
+            if (key == KeyCode.I)
+            {
+                // Only open inventory menu if:
+                // 1. We're in gameplay (not at main menu)
+                // 2. Current map exists
+                // 3. No windows are preventing camera motion (means a dialog is open)
+                // 4. Not in zone creation mode
+                // 5. Inventory menu is not already active
+                if (Current.ProgramState == ProgramState.Playing &&
+                    Find.CurrentMap != null &&
+                    (Find.WindowStack == null || !Find.WindowStack.WindowsPreventCameraMotion) &&
+                    !ZoneCreationState.IsInCreationMode &&
+                    !WindowlessInventoryState.IsActive)
+                {
+                    // Prevent the default I key behavior
+                    Event.current.Use();
+
+                    // Open the colony-wide inventory menu
+                    WindowlessInventoryState.Open();
                     return;
                 }
             }

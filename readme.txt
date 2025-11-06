@@ -32,8 +32,8 @@ Arrow Keys    Move cursor one tile in any direction
 
 , (comma)     Cycle to previous colonist (selects but doesn't move camera)
 . (period)    Cycle to next colonist (selects but doesn't move camera)
-I         Open inspection menu at cursor position
-Enter           Open building settings.
+I (Shift+i)   Open colony-wide inventory menu
+Enter         Open building settings.
 Escape        Open pause menu
 
 NAVIGATION FEATURES:
@@ -304,6 +304,37 @@ Opens jump menu with categories:
 Left/Right    Expand/collapse categories
 Up/Down       Navigate items
 Enter         Jump to selected item
+
+
+COLONY INVENTORY MENU (Press I / Shift+i)
+------------------------------------------
+Displays all items stored across your entire colony in a hierarchical menu organized
+by category. Items from all stockpiles and storage buildings are combined and totaled
+together (e.g., 100 wood in stockpile 1 + 300 wood in stockpile 2 = Wood x400).
+
+Navigation:
+Up/Down       Navigate through categories, items, and actions
+Left/Right    Collapse/expand categories and items
+Enter         Activate selection (expand/collapse or execute action)
+Escape        Close inventory menu
+
+Structure:
+1. Categories (Foods, Resources, Weapons, Apparel, etc.)
+   └─ Items with total quantities (Wood x400, Steel x250)
+      └─ Actions:
+         - Jump to location: Moves camera and cursor to where item is stored
+         - View details: Shows item description, market value, mass, and storage info
+
+Examples:
+- "Resources [Collapsed]"
+- "Wood x400 [Expanded]"
+- "Jump to location"
+
+Notes:
+- All items of the same type are combined regardless of storage location
+- Categories show the number of item types they contain
+- Jump to location feature closes the menu and moves you to the first storage location
+- Empty colonies will show "No items in colony storage"
 
 
 OTHER SHORTCUTS
