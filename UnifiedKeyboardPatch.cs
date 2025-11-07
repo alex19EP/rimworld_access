@@ -73,6 +73,23 @@ namespace RimWorldAccess
                 }
             }
 
+            // ===== PRIORITY 2.3: Handle trade confirmation if active =====
+            if (TradeConfirmationState.IsActive)
+            {
+                if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
+                {
+                    TradeConfirmationState.Confirm();
+                    Event.current.Use();
+                    return;
+                }
+                else if (key == KeyCode.Escape)
+                {
+                    TradeConfirmationState.Cancel();
+                    Event.current.Use();
+                    return;
+                }
+            }
+
             // ===== PRIORITY 2.5: Handle area painting mode if active =====
             if (AreaPaintingState.IsActive)
             {
@@ -99,6 +116,115 @@ namespace RimWorldAccess
                 }
                 // Note: Arrow keys are NOT handled here - they pass through to MapNavigationPatch
                 // The ZoneCreationAnnouncementPatch postfix will add "Selected" prefix if needed
+
+                if (handled)
+                {
+                    Event.current.Use();
+                    return;
+                }
+            }
+
+            // ===== PRIORITY 2.6: Handle trade menu if active =====
+            // (but not if confirmation dialog is showing - that's handled at Priority 2.3)
+            if (TradeNavigationState.IsActive && !TradeConfirmationState.IsActive)
+            {
+                bool handled = false;
+
+                // Check for modifier keys
+                bool shift = Event.current.shift;
+                bool ctrl = Event.current.control;
+                bool alt = Event.current.alt;
+
+                if (key == KeyCode.DownArrow)
+                {
+                    if (shift)
+                        TradeNavigationState.AdjustQuantityLarge(-1);
+                    else if (ctrl)
+                        TradeNavigationState.AdjustQuantityVeryLarge(-1);
+                    else
+                        TradeNavigationState.SelectNext();
+                    handled = true;
+                }
+                else if (key == KeyCode.UpArrow)
+                {
+                    if (shift)
+                        TradeNavigationState.AdjustQuantityLarge(1);
+                    else if (ctrl)
+                        TradeNavigationState.AdjustQuantityVeryLarge(1);
+                    else if (alt)
+                        TradeNavigationState.SetToMaximumSell();
+                    else
+                        TradeNavigationState.SelectPrevious();
+                    handled = true;
+                }
+                else if (key == KeyCode.LeftArrow)
+                {
+                    TradeNavigationState.PreviousCategory();
+                    handled = true;
+                }
+                else if (key == KeyCode.RightArrow)
+                {
+                    TradeNavigationState.NextCategory();
+                    handled = true;
+                }
+                else if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
+                {
+                    // Enter either enters quantity mode or exits it
+                    TradeNavigationState.EnterQuantityMode();
+                    handled = true;
+                }
+                else if (key == KeyCode.Escape)
+                {
+                    // Escape exits quantity mode first, then closes menu
+                    bool exitedQuantityMode = TradeNavigationState.ExitQuantityMode();
+                    // If we didn't exit quantity mode (were already in list view), close the trade
+                    if (!exitedQuantityMode)
+                    {
+                        TradeNavigationState.Close();
+                        TradeSession.Close();
+                    }
+                    handled = true;
+                }
+                else if (key == KeyCode.A && !shift && !ctrl && !alt)
+                {
+                    TradeNavigationState.AcceptTrade();
+                    handled = true;
+                }
+                else if (key == KeyCode.R && !shift && !ctrl && !alt)
+                {
+                    TradeNavigationState.ResetCurrentItem();
+                    handled = true;
+                }
+                else if (key == KeyCode.R && shift)
+                {
+                    TradeNavigationState.ResetAll();
+                    handled = true;
+                }
+                else if (key == KeyCode.G && !shift && !ctrl && !alt)
+                {
+                    TradeNavigationState.ToggleGiftMode();
+                    handled = true;
+                }
+                else if (key == KeyCode.P && !shift && !ctrl && !alt)
+                {
+                    TradeNavigationState.ShowPriceBreakdown();
+                    handled = true;
+                }
+                else if (key == KeyCode.B && !shift && !ctrl && !alt)
+                {
+                    TradeNavigationState.AnnounceTradeBalance();
+                    handled = true;
+                }
+                else if (key == KeyCode.Minus || key == KeyCode.KeypadMinus)
+                {
+                    TradeNavigationState.AdjustQuantity(-1);
+                    handled = true;
+                }
+                else if (key == KeyCode.Plus || key == KeyCode.KeypadPlus || key == KeyCode.Equals)
+                {
+                    TradeNavigationState.AdjustQuantity(1);
+                    handled = true;
+                }
 
                 if (handled)
                 {

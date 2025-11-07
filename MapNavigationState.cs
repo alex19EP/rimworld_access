@@ -57,10 +57,22 @@ namespace RimWorldAccess
         /// <summary>
         /// Gets or sets whether map navigation should be suppressed (e.g., when menus are open).
         /// When true, arrow keys will not move the map cursor.
+        /// Automatically returns true if trade menu or trade confirmation is active.
         /// </summary>
         public static bool SuppressMapNavigation
         {
-            get => suppressMapNavigation;
+            get
+            {
+                // Suppress if trade menu is active
+                if (TradeNavigationState.IsActive)
+                    return true;
+
+                // Suppress if trade confirmation dialog is active
+                if (TradeConfirmationState.IsActive)
+                    return true;
+
+                return suppressMapNavigation;
+            }
             set => suppressMapNavigation = value;
         }
 
