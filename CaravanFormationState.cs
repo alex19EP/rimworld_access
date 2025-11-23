@@ -56,6 +56,9 @@ namespace RimWorldAccess
             currentTab = Tab.Pawns;
             selectedIndex = 0;
 
+            // Disable auto-select travel supplies to prevent it from resetting our manual selections
+            DisableAutoSelectTravelSupplies();
+
             TolkHelper.Speak("Caravan formation dialog opened. Use Left/Right to switch tabs, Up/Down to navigate, +/- or Enter to adjust. Press D to choose destination, navigate with arrows and press Enter to confirm. Press T to send, R to reset, Escape to cancel.");
             AnnounceCurrentTab();
             AnnounceCurrentItem();
@@ -112,28 +115,59 @@ namespace RimWorldAccess
                 case Tab.Pawns:
                     // Pawns: anything that's a Pawn
                     return allTransferables
-                        .Where(t => t.AnyThing is Pawn)
+                        .Where(t => t.ThingDef.category == ThingCategory.Pawn)
                         .ToList();
 
                 case Tab.TravelSupplies:
-                    // Travel Supplies: food, medicine, bedrolls
+                    // Travel Supplies: use RimWorld's official filtering logic from CaravanUIUtility.GetTransferableCategory
                     return allTransferables
-                        .Where(t => !(t.AnyThing is Pawn) &&
-                                   (t.ThingDef.IsIngestible || t.ThingDef.IsMedicine ||
-                                    t.ThingDef.thingCategories?.Any(c => c.defName == "Bedrolls") == true))
+                        .Where(t => GetTransferableCategory(t) == TransferableCategory.TravelSupplies)
                         .ToList();
 
                 case Tab.Items:
                     // Items: everything that's not a pawn and not travel supplies
                     return allTransferables
-                        .Where(t => !(t.AnyThing is Pawn) &&
-                                   !t.ThingDef.IsIngestible && !t.ThingDef.IsMedicine &&
-                                   !(t.ThingDef.thingCategories?.Any(c => c.defName == "Bedrolls") == true))
+                        .Where(t => GetTransferableCategory(t) == TransferableCategory.Item)
                         .ToList();
 
                 default:
                     return allTransferables;
             }
+        }
+
+        /// <summary>
+        /// Replicates RimWorld's CaravanUIUtility.GetTransferableCategory logic.
+        /// This determines whether an item is a Pawn, Travel Supply, or regular Item.
+        /// </summary>
+        private static TransferableCategory GetTransferableCategory(TransferableOneWay t)
+        {
+            if (t.ThingDef.category == ThingCategory.Pawn)
+            {
+                return TransferableCategory.Pawn;
+            }
+
+            // Travel Supplies include:
+            // 1. Medicine (in the Medicine thing category)
+            // 2. Food (ingestible, not drug, not corpse, not tree)
+            // 3. Bedrolls (beds that caravans can use)
+            if ((!t.ThingDef.thingCategories.NullOrEmpty() && t.ThingDef.thingCategories.Contains(ThingCategoryDefOf.Medicine)) ||
+                (t.ThingDef.IsIngestible && !t.ThingDef.IsDrug && !t.ThingDef.IsCorpse && (t.ThingDef.plant == null || !t.ThingDef.plant.IsTree)) ||
+                (t.AnyThing.GetInnerIfMinified().def.IsBed && t.AnyThing.GetInnerIfMinified().def.building != null && t.AnyThing.GetInnerIfMinified().def.building.bed_caravansCanUse))
+            {
+                return TransferableCategory.TravelSupplies;
+            }
+
+            return TransferableCategory.Item;
+        }
+
+        /// <summary>
+        /// Enum matching RimWorld's internal TransferableCategory enum.
+        /// </summary>
+        private enum TransferableCategory
+        {
+            Pawn,
+            Item,
+            TravelSupplies
         }
 
         /// <summary>
@@ -325,7 +359,15 @@ namespace RimWorldAccess
             else
             {
                 // For items, adjust by delta
-                if (transferable.CanAdjustBy(delta))
+                // Check if the item is interactive first
+                if (!transferable.Interactive)
+                {
+                    TolkHelper.Speak("This item cannot be adjusted");
+                    return;
+                }
+
+                AcceptanceReport canAdjust = transferable.CanAdjustBy(delta);
+                if (canAdjust.Accepted)
                 {
                     transferable.AdjustBy(delta);
                     NotifyTransferablesChanged();
@@ -333,7 +375,9 @@ namespace RimWorldAccess
                 }
                 else
                 {
-                    TolkHelper.Speak("Cannot adjust quantity");
+                    // Report the specific reason why adjustment failed
+                    string reason = canAdjust.Reason.NullOrEmpty() ? "Cannot adjust quantity" : canAdjust.Reason;
+                    TolkHelper.Speak(reason);
                 }
             }
 
@@ -376,7 +420,15 @@ namespace RimWorldAccess
             else
             {
                 // For items, increment by 1
-                if (transferable.CanAdjustBy(1))
+                // Check if the item is interactive first
+                if (!transferable.Interactive)
+                {
+                    TolkHelper.Speak("This item cannot be adjusted");
+                    return;
+                }
+
+                AcceptanceReport canAdjust = transferable.CanAdjustBy(1);
+                if (canAdjust.Accepted)
                 {
                     transferable.AdjustBy(1);
                     NotifyTransferablesChanged();
@@ -384,7 +436,9 @@ namespace RimWorldAccess
                 }
                 else
                 {
-                    TolkHelper.Speak("Cannot increase quantity");
+                    // Report the specific reason why adjustment failed
+                    string reason = canAdjust.Reason.NullOrEmpty() ? "Cannot increase quantity" : canAdjust.Reason;
+                    TolkHelper.Speak(reason);
                 }
             }
 
@@ -611,6 +665,28 @@ namespace RimWorldAccess
         }
 
         /// <summary>
+        /// Disables auto-select travel supplies feature to prevent it from resetting manual selections.
+        /// </summary>
+        private static void DisableAutoSelectTravelSupplies()
+        {
+            if (currentDialog == null)
+                return;
+
+            try
+            {
+                FieldInfo field = AccessTools.Field(typeof(Dialog_FormCaravan), "autoSelectTravelSupplies");
+                if (field != null)
+                {
+                    field.SetValue(currentDialog, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error($"Failed to disable auto-select travel supplies: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Notifies the dialog that transferables have changed, which recalculates mass/food stats.
         /// </summary>
         private static void NotifyTransferablesChanged()
@@ -628,7 +704,7 @@ namespace RimWorldAccess
             }
             catch (Exception ex)
             {
-                Log.Error($"RimWorld Access: Failed to call Notify_TransferablesChanged: {ex.Message}");
+                ModLogger.Error($"Failed to call Notify_TransferablesChanged: {ex.Message}");
             }
         }
 

@@ -336,6 +336,17 @@ namespace RimWorldAccess
         }
 
         /// <summary>
+        /// Opens the quest locations browser (Q key).
+        /// </summary>
+        public static void OpenQuestLocationsBrowser()
+        {
+            if (!isInitialized)
+                return;
+
+            QuestLocationsBrowserState.Open(currentSelectedTile);
+        }
+
+        /// <summary>
         /// Cycles to the next settlement (by distance from current position).
         /// </summary>
         public static void CycleToNextSettlement()

@@ -79,6 +79,16 @@ namespace RimWorldAccess
                 }
             }
 
+            // Handle quest locations browser input if it's active
+            if (QuestLocationsBrowserState.IsActive)
+            {
+                if (QuestLocationsBrowserState.HandleInput(key))
+                {
+                    Event.current.Use();
+                    return;
+                }
+            }
+
             // Handle settlement browser input if it's active
             if (SettlementBrowserState.IsActive)
             {
@@ -121,6 +131,14 @@ namespace RimWorldAccess
             if (key == KeyCode.S && !shift && !ctrl && !alt)
             {
                 WorldNavigationState.OpenSettlementBrowser();
+                Event.current.Use();
+                return;
+            }
+
+            // Handle Q key - open quest locations browser
+            if (key == KeyCode.Q && !shift && !ctrl && !alt)
+            {
+                WorldNavigationState.OpenQuestLocationsBrowser();
                 Event.current.Use();
                 return;
             }
@@ -168,7 +186,7 @@ namespace RimWorldAccess
                 }
             }
 
-            // Handle Escape key - close caravan stats, settlement browser, cancel destination selection, or let RimWorld handle it
+            // Handle Escape key - close caravan stats, quest locations browser, settlement browser, cancel destination selection, or let RimWorld handle it
             if (key == KeyCode.Escape)
             {
                 if (CaravanFormationState.IsChoosingDestination)
@@ -180,6 +198,12 @@ namespace RimWorldAccess
                 else if (CaravanStatsState.IsActive)
                 {
                     CaravanStatsState.Close();
+                    Event.current.Use();
+                    return;
+                }
+                else if (QuestLocationsBrowserState.IsActive)
+                {
+                    QuestLocationsBrowserState.Close();
                     Event.current.Use();
                     return;
                 }
@@ -249,7 +273,7 @@ namespace RimWorldAccess
 
             // Get tile info
             string tileInfo = WorldInfoHelper.GetTileSummary(tile);
-            string instructions = "Arrows: Navigate | Home: Home | End: Caravan | ,/.: Cycle Caravans | S: Settlements | I: Details | C: Form | ]: Orders";
+            string instructions = "Arrows: Navigate | Home: Home | End: Caravan | ,/.: Cycle Caravans | S: Settlements | Q: Quest Locations | I: Details | C: Form | ]: Orders";
 
             Rect infoRect = new Rect(overlayX, overlayY + 15f, overlayWidth, 30f);
             Rect instructionsRect = new Rect(overlayX, overlayY + 45f, overlayWidth, 25f);
