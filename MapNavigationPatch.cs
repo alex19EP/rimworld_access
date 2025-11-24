@@ -139,17 +139,22 @@ namespace RimWorldAccess
             bool shiftHeld = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 
             // Handle Shift+Up/Down for jump mode cycling
-            if (shiftHeld && Input.GetKeyDown(KeyCode.UpArrow))
+            // (but not when zone creation is active in Manual mode - that uses Shift+Arrows for auto-select to wall)
+            bool blockJumpModeCycling = ZoneCreationState.IsInCreationMode && ZoneCreationState.CurrentMode == ZoneCreationMode.Manual;
+            if (shiftHeld && !blockJumpModeCycling)
             {
-                MapNavigationState.CycleJumpModeForward();
-                hasAnnouncedThisFrame = true;
-                return;
-            }
-            else if (shiftHeld && Input.GetKeyDown(KeyCode.DownArrow))
-            {
-                MapNavigationState.CycleJumpModeBackward();
-                hasAnnouncedThisFrame = true;
-                return;
+                if (Input.GetKeyDown(KeyCode.UpArrow))
+                {
+                    MapNavigationState.CycleJumpModeForward();
+                    hasAnnouncedThisFrame = true;
+                    return;
+                }
+                else if (Input.GetKeyDown(KeyCode.DownArrow))
+                {
+                    MapNavigationState.CycleJumpModeBackward();
+                    hasAnnouncedThisFrame = true;
+                    return;
+                }
             }
 
             // Check each arrow key direction
@@ -230,6 +235,17 @@ namespace RimWorldAccess
 
                     // Get tile information and announce it
                     string tileInfo = TileInfoHelper.GetTileSummary(newPosition, Find.CurrentMap);
+
+                    // If in zone creation mode and this cell is selected, prepend "Selected"
+                    if (ZoneCreationState.IsInCreationMode && ZoneCreationState.IsCellSelected(newPosition))
+                    {
+                        tileInfo = "Selected, " + tileInfo;
+                    }
+                    // If in area painting mode and this cell is staged, prepend "Selected"
+                    else if (AreaPaintingState.IsActive && AreaPaintingState.StagedCells.Contains(newPosition))
+                    {
+                        tileInfo = "Selected, " + tileInfo;
+                    }
 
                     // Only announce if different from last announcement (avoids spam when hitting map edge)
                     if (tileInfo != MapNavigationState.LastAnnouncedInfo)

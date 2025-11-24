@@ -145,25 +145,56 @@ namespace RimWorldAccess
             // Stockpile zone option
             options.Add(new FloatMenuOption("Stockpile zone", () =>
             {
-                ZoneCreationState.EnterCreationMode(ZoneType.Stockpile);
+                ShowModeSelectionMenu(ZoneType.Stockpile);
             }));
 
             // Dumping stockpile zone option
             options.Add(new FloatMenuOption("Dumping stockpile zone", () =>
             {
-                ZoneCreationState.EnterCreationMode(ZoneType.DumpingStockpile);
+                ShowModeSelectionMenu(ZoneType.DumpingStockpile);
             }));
 
             // Growing zone option
             options.Add(new FloatMenuOption("Growing zone", () =>
             {
-                ZoneCreationState.EnterCreationMode(ZoneType.GrowingZone);
+                ShowModeSelectionMenu(ZoneType.GrowingZone);
             }));
 
             // Open the windowless menu
             WindowlessFloatMenuState.Open(options, false); // false = doesn't give colonist orders
-            
+
             MelonLoader.MelonLogger.Msg("Opened zone creation menu");
+        }
+
+        /// <summary>
+        /// Shows a menu for selecting the zone creation mode (Manual, Borders, or Corners).
+        /// </summary>
+        private static void ShowModeSelectionMenu(ZoneType zoneType)
+        {
+            List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+            // Manual selection mode
+            options.Add(new FloatMenuOption("Manual selection", () =>
+            {
+                ZoneCreationState.EnterCreationMode(zoneType, ZoneCreationMode.Manual);
+            }));
+
+            // Borders mode
+            options.Add(new FloatMenuOption("Borders mode", () =>
+            {
+                ZoneCreationState.EnterCreationMode(zoneType, ZoneCreationMode.Borders);
+            }));
+
+            // Corners mode
+            options.Add(new FloatMenuOption("Corners mode", () =>
+            {
+                ZoneCreationState.EnterCreationMode(zoneType, ZoneCreationMode.Corners);
+            }));
+
+            // Open the windowless menu
+            WindowlessFloatMenuState.Open(options, false);
+
+            MelonLoader.MelonLogger.Msg($"Opened mode selection menu for {zoneType}");
         }
     }
 

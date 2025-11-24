@@ -41,9 +41,32 @@ namespace RimWorldAccess
 
             KeyCode key = Event.current.keyCode;
             bool handled = false;
+            bool shiftHeld = Event.current.shift;
 
+            // Shift+Arrow keys - auto-select to wall (only in manual mode)
+            if (shiftHeld && ZoneCreationState.CurrentMode == ZoneCreationMode.Manual)
+            {
+                IntVec3 currentPosition = MapNavigationState.CurrentCursorPosition;
+                Map map = Find.CurrentMap;
+                Rot4 direction = Rot4.Invalid;
+
+                if (key == KeyCode.UpArrow)
+                    direction = Rot4.North;
+                else if (key == KeyCode.DownArrow)
+                    direction = Rot4.South;
+                else if (key == KeyCode.LeftArrow)
+                    direction = Rot4.West;
+                else if (key == KeyCode.RightArrow)
+                    direction = Rot4.East;
+
+                if (direction != Rot4.Invalid)
+                {
+                    ZoneCreationState.AutoSelectToWall(currentPosition, direction, map);
+                    handled = true;
+                }
+            }
             // Space key - toggle selection of current cell
-            if (key == KeyCode.Space)
+            else if (key == KeyCode.Space)
             {
                 // Cooldown to prevent rapid toggling
                 if (Time.time - lastSpaceTime < SpaceCooldown)
@@ -52,7 +75,7 @@ namespace RimWorldAccess
                 lastSpaceTime = Time.time;
 
                 IntVec3 currentPosition = MapNavigationState.CurrentCursorPosition;
-                
+
                 if (!ZoneCreationState.IsCellSelected(currentPosition))
                 {
                     ZoneCreationState.AddCell(currentPosition);
@@ -61,13 +84,32 @@ namespace RimWorldAccess
                 {
                     ZoneCreationState.RemoveCell(currentPosition);
                 }
-                
+
                 handled = true;
             }
-            // Enter key - confirm and create zone
+            // Enter key - behavior depends on current mode
             else if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
             {
-                ZoneCreationState.CreateZone(Find.CurrentMap);
+                Map map = Find.CurrentMap;
+
+                switch (ZoneCreationState.CurrentMode)
+                {
+                    case ZoneCreationMode.Manual:
+                        // Manual mode: create the zone
+                        ZoneCreationState.CreateZone(map);
+                        break;
+
+                    case ZoneCreationMode.Borders:
+                        // Borders mode: auto-fill interior, then switch to manual
+                        ZoneCreationState.BordersModeAutoFill(map);
+                        break;
+
+                    case ZoneCreationMode.Corners:
+                        // Corners mode: fill rectangle, then switch to manual
+                        ZoneCreationState.CornersModeAutoFill(map);
+                        break;
+                }
+
                 handled = true;
             }
             // Escape key - cancel zone creation
@@ -84,67 +126,6 @@ namespace RimWorldAccess
         }
     }
 
-    /// <summary>
-    /// Harmony patch to modify map navigation announcements during zone creation.
-    /// </summary>
-    [HarmonyPatch(typeof(CameraDriver))]
-    [HarmonyPatch("Update")]
-    public static class ZoneCreationAnnouncementPatch
-    {
-        /// <summary>
-        /// Postfix patch to modify tile announcements during zone creation.
-        /// Prepends "Selected" to coordinates for cells that are in the selection.
-        /// </summary>
-        [HarmonyPostfix]
-        [HarmonyPriority(Priority.Last)] // Run after MapNavigationPatch
-        public static void Postfix(CameraDriver __instance)
-        {
-            // Only active when in zone creation or area painting mode
-            if (!ZoneCreationState.IsInCreationMode && !AreaPaintingState.IsActive)
-                return;
-
-            // Check if an arrow key was just pressed
-            if (Find.CurrentMap == null || !MapNavigationState.IsInitialized)
-                return;
-
-            // Check if any arrow key was pressed this frame
-            bool arrowKeyPressed = Input.GetKeyDown(KeyCode.UpArrow) ||
-                                   Input.GetKeyDown(KeyCode.DownArrow) ||
-                                   Input.GetKeyDown(KeyCode.LeftArrow) ||
-                                   Input.GetKeyDown(KeyCode.RightArrow);
-
-            if (arrowKeyPressed)
-            {
-                IntVec3 currentPosition = MapNavigationState.CurrentCursorPosition;
-
-                // Check if cell is selected in either zone creation or area painting
-                bool isSelected = false;
-                if (ZoneCreationState.IsInCreationMode)
-                {
-                    isSelected = ZoneCreationState.IsCellSelected(currentPosition);
-                }
-                else if (AreaPaintingState.IsActive)
-                {
-                    isSelected = AreaPaintingState.StagedCells.Contains(currentPosition);
-                }
-
-                // If this cell is selected, prepend "Selected" to the announcement
-                if (isSelected)
-                {
-                    // Get the last announced info and modify it
-                    string lastInfo = MapNavigationState.LastAnnouncedInfo;
-
-                    // Only modify if it doesn't already start with "Selected"
-                    if (!lastInfo.StartsWith("Selected"))
-                    {
-                        string modifiedInfo = "Selected, " + lastInfo;
-                        TolkHelper.Speak(modifiedInfo);
-                        MapNavigationState.LastAnnouncedInfo = modifiedInfo;
-                    }
-                }
-            }
-        }
-    }
 
     /// <summary>
     /// Harmony patch to intercept pause key (Space) during zone creation mode.
