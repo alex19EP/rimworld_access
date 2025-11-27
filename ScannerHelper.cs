@@ -115,8 +115,10 @@ namespace RimWorldAccess
             var colonistsCategory = new ScannerCategory("Colonists");
             var playerPawnsSubcat = new ScannerSubcategory("Player-Controlled Pawns");
             var npcPawnsSubcat = new ScannerSubcategory("NPCs");
+            var mechanoidsSubcat = new ScannerSubcategory("Mechanoids");
             colonistsCategory.Subcategories.Add(playerPawnsSubcat);
             colonistsCategory.Subcategories.Add(npcPawnsSubcat);
+            colonistsCategory.Subcategories.Add(mechanoidsSubcat);
 
             var tameAnimalsCategory = new ScannerCategory("Tame Animals");
             var tameAnimalsSubcat = new ScannerSubcategory("All");
@@ -168,7 +170,12 @@ namespace RimWorldAccess
                 if (thing is Pawn pawn)
                 {
                     // Categorize pawns
-                    if (pawn.RaceProps.Humanlike)
+                    if (pawn.RaceProps.IsMechanoid)
+                    {
+                        // Mechanoids subcategory (all mechanoids regardless of faction)
+                        mechanoidsSubcat.Items.Add(item);
+                    }
+                    else if (pawn.RaceProps.Humanlike)
                     {
                         // Colonists category
                         if (pawn.Faction == playerFaction)
