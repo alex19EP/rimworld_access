@@ -19,13 +19,24 @@ namespace RimWorldAccess
             { "rich soil", "Rich Soil.wav" },
             { "stony soil", "stoney Soil.wav" },  // Note: audio file uses "stoney" spelling
             { "stoney soil", "stoney Soil.wav" }, // Alternative spelling
-            { "smooth sandstone", "stone flooring.wav" },  // Smooth stone floors
+            { "smoothed sandstone", "stone flooring.wav" },  // Smoothed stone walls
+            { "smoothed granite", "stone flooring.wav" },
+            { "smoothed limestone", "stone flooring.wav" },
+            { "smoothed slate", "stone flooring.wav" },
+            { "smoothed marble", "stone flooring.wav" },
+            { "smooth sandstone", "stone flooring.wav" },  // Alternative spelling
             { "smooth granite", "stone flooring.wav" },
             { "smooth limestone", "stone flooring.wav" },
             { "smooth slate", "stone flooring.wav" },
             { "smooth marble", "stone flooring.wav" },
+            { "sandstone", "stone flooring.wav" },  // Rough stone (natural rock)
+            { "granite", "stone flooring.wav" },
+            { "limestone", "stone flooring.wav" },
+            { "slate", "stone flooring.wav" },
+            { "marble", "stone flooring.wav" },
             { "stone floor", "stone flooring.wav" },
             { "stone tile", "stone flooring.wav" },
+            { "paved tile", "stone flooring.wav" },  // Paved tile floor
             { "flagstone", "stone flooring.wav" },
             { "slate tile", "stone flooring.wav" },
             { "marble tile", "stone flooring.wav" },
