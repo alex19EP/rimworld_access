@@ -161,6 +161,7 @@ namespace RimWorldAccess
             {
                 if (addedSomething) sb.Append(", ");
                 sb.Append(zone.label);
+                addedSomething = true;
             }
 
             // Add roofed status (only if roofed, not unroofed)
