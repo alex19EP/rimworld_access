@@ -73,7 +73,7 @@ namespace RimWorldAccess
                 addedSomething = true;
             }
 
-            // Add buildings with power and temperature info
+            // Add buildings with temperature info
             foreach (var building in buildings.Take(2))
             {
                 if (addedSomething) sb.Append(", ");
@@ -92,14 +92,6 @@ namespace RimWorldAccess
                 {
                     sb.Append(", ");
                     sb.Append(tempControlInfo);
-                }
-
-                // Add power information if building has power components
-                string powerInfo = PowerInfoHelper.GetPowerInfo(building);
-                if (!string.IsNullOrEmpty(powerInfo))
-                {
-                    sb.Append(", ");
-                    sb.Append(powerInfo);
                 }
 
                 addedSomething = true;
@@ -174,15 +166,6 @@ namespace RimWorldAccess
                     sb.Append("roofed");
                 addedSomething = true;
             }
-
-            // Add light level
-            PsychGlow lightLevel = map.glowGrid.PsychGlowAt(position);
-            string lightDescription = lightLevel.GetLabel();
-            if (addedSomething)
-                sb.Append($", {lightDescription}");
-            else
-                sb.Append(lightDescription);
-            addedSomething = true;
 
             // Add coordinates
             if (addedSomething)
@@ -485,7 +468,7 @@ namespace RimWorldAccess
 
         /// <summary>
         /// Gets information about brightness and temperature at a tile (key 4).
-        /// Shows light level, temperature, and indoor/outdoor status.
+        /// Shows light level (simplified), temperature, and indoor/outdoor status.
         /// </summary>
         public static string GetLightInfo(IntVec3 position, Map map)
         {
@@ -494,14 +477,25 @@ namespace RimWorldAccess
 
             var sb = new StringBuilder();
 
-            // Get light level
+            // Get light level (simplified to dark/lit/brightly lit)
             PsychGlow lightLevel = map.glowGrid.PsychGlowAt(position);
-            string lightDescription = lightLevel.GetLabel();
+            string lightDescription;
+            switch (lightLevel)
+            {
+                case PsychGlow.Dark:
+                    lightDescription = "dark";
+                    break;
+                case PsychGlow.Lit:
+                    lightDescription = "lit";
+                    break;
+                case PsychGlow.Overlit:
+                    lightDescription = "brightly lit";
+                    break;
+                default:
+                    lightDescription = lightLevel.GetLabel();
+                    break;
+            }
             sb.Append(lightDescription);
-
-            // Get actual glow value
-            float glow = map.glowGrid.GroundGlowAt(position, false);
-            sb.Append($" ({glow:F1} glow)");
 
             // Get temperature
             float temperature = position.GetTemperature(map);
@@ -526,6 +520,45 @@ namespace RimWorldAccess
                     sb.Append($". {building.LabelShortCap}: {tempControlInfo}");
                 }
             }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Gets power information for objects at a tile (key 6).
+        /// Shows power status for any buildings connected to a power network.
+        /// </summary>
+        public static string GetPowerInfo(IntVec3 position, Map map)
+        {
+            if (map == null || !position.InBounds(map))
+                return "Out of bounds";
+
+            List<Thing> things = position.GetThingList(map);
+            var buildings = things.OfType<Building>().ToList();
+
+            if (buildings.Count == 0)
+                return "no buildings";
+
+            var sb = new StringBuilder();
+            int buildingsWithPower = 0;
+
+            foreach (var building in buildings)
+            {
+                string powerInfo = PowerInfoHelper.GetPowerInfo(building);
+                if (!string.IsNullOrEmpty(powerInfo))
+                {
+                    if (buildingsWithPower > 0)
+                        sb.Append(". ");
+
+                    sb.Append(building.LabelShortCap);
+                    sb.Append(": ");
+                    sb.Append(powerInfo);
+                    buildingsWithPower++;
+                }
+            }
+
+            if (buildingsWithPower == 0)
+                return "no power-connected buildings";
 
             return sb.ToString();
         }
