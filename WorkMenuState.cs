@@ -114,16 +114,8 @@ namespace RimWorldAccess
                 return;
             }
 
-            int changesApplied = 0;
-
-            foreach (var entry in workEntries)
-            {
-                if (!entry.IsDisabled && entry.CurrentPriority != entry.OriginalPriority)
-                {
-                    currentPawn.workSettings.SetPriority(entry.WorkType, entry.CurrentPriority);
-                    changesApplied++;
-                }
-            }
+            // Apply final changes
+            int changesApplied = ApplyPendingChanges();
 
             string message = changesApplied > 0
                 ? $"Applied {changesApplied} work assignment changes for {currentPawn.LabelShort}"
@@ -137,6 +129,29 @@ namespace RimWorldAccess
             allPawns.Clear();
             selectedIndex = 0;
             workEntries.Clear();
+        }
+
+        /// <summary>
+        /// Applies all pending changes to the current pawn's work settings.
+        /// Returns the number of changes applied.
+        /// </summary>
+        private static int ApplyPendingChanges()
+        {
+            if (currentPawn == null || currentPawn.workSettings == null)
+                return 0;
+
+            int changesApplied = 0;
+
+            foreach (var entry in workEntries)
+            {
+                if (!entry.IsDisabled && entry.CurrentPriority != entry.OriginalPriority)
+                {
+                    currentPawn.workSettings.SetPriority(entry.WorkType, entry.CurrentPriority);
+                    changesApplied++;
+                }
+            }
+
+            return changesApplied;
         }
 
         /// <summary>
@@ -228,11 +243,15 @@ namespace RimWorldAccess
 
         /// <summary>
         /// Switches to the next pawn in the list (wraps around).
+        /// Automatically applies any pending changes before switching.
         /// </summary>
         public static void SwitchToNextPawn()
         {
             if (allPawns.Count == 0)
                 return;
+
+            // Apply pending changes for current pawn before switching
+            ApplyPendingChanges();
 
             currentPawnIndex = (currentPawnIndex + 1) % allPawns.Count;
             currentPawn = allPawns[currentPawnIndex];
@@ -243,11 +262,15 @@ namespace RimWorldAccess
 
         /// <summary>
         /// Switches to the previous pawn in the list (wraps around).
+        /// Automatically applies any pending changes before switching.
         /// </summary>
         public static void SwitchToPreviousPawn()
         {
             if (allPawns.Count == 0)
                 return;
+
+            // Apply pending changes for current pawn before switching
+            ApplyPendingChanges();
 
             currentPawnIndex--;
             if (currentPawnIndex < 0)
