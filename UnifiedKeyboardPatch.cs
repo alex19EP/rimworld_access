@@ -66,6 +66,7 @@ namespace RimWorldAccess
                 else
                 {
                     // Not editing - allow arrow keys and Enter/Escape for dialog navigation
+                    // These keys will be handled by WindowlessDialogInputPatch (VeryHigh priority)
                     // Block everything else (R, F, A, Z, Tab, etc.)
                     if (key != KeyCode.UpArrow && key != KeyCode.DownArrow &&
                         key != KeyCode.LeftArrow && key != KeyCode.RightArrow &&
@@ -76,6 +77,10 @@ namespace RimWorldAccess
                         Event.current.Use();
                         return;
                     }
+                    // If we reach here, key is arrow/Enter/Escape for dialog navigation
+                    // These are handled by WindowlessDialogInputPatch, so don't process them here
+                    // Return immediately to prevent other handlers from interfering
+                    return;
                 }
             }
 
@@ -102,7 +107,8 @@ namespace RimWorldAccess
             }
 
             // ===== PRIORITY 0: Handle caravan stats viewer if active (must be before key blocking) =====
-            if (CaravanStatsState.IsActive)
+            // BUT: Skip if windowless dialog is active - dialogs take absolute priority
+            if (CaravanStatsState.IsActive && !WindowlessDialogState.IsActive)
             {
                 if (CaravanStatsState.HandleInput(key))
                 {
@@ -112,7 +118,8 @@ namespace RimWorldAccess
             }
 
             // ===== PRIORITY 0: Handle settlement browser in world view (must be before key blocking) =====
-            if (SettlementBrowserState.IsActive)
+            // BUT: Skip if windowless dialog is active - dialogs take absolute priority
+            if (SettlementBrowserState.IsActive && !WindowlessDialogState.IsActive)
             {
                 if (SettlementBrowserState.HandleInput(key))
                 {
@@ -122,7 +129,8 @@ namespace RimWorldAccess
             }
 
             // ===== PRIORITY 0.25: Handle caravan destination selection if active =====
-            if (CaravanFormationState.IsChoosingDestination)
+            // BUT: Skip if windowless dialog is active - dialogs take absolute priority
+            if (CaravanFormationState.IsChoosingDestination && !WindowlessDialogState.IsActive)
             {
                 bool shift = Event.current.shift;
                 bool ctrl = Event.current.control;
@@ -148,7 +156,8 @@ namespace RimWorldAccess
             }
 
             // ===== PRIORITY 0.3: Handle caravan formation dialog if active =====
-            if (CaravanFormationState.IsActive && !CaravanFormationState.IsChoosingDestination)
+            // BUT: Skip if windowless dialog is active - dialogs take absolute priority
+            if (CaravanFormationState.IsActive && !CaravanFormationState.IsChoosingDestination && !WindowlessDialogState.IsActive)
             {
                 bool shift = Event.current.shift;
                 bool ctrl = Event.current.control;
@@ -163,8 +172,10 @@ namespace RimWorldAccess
 
             // ===== PRIORITY 0.5: Handle world navigation special keys (Home/End/PageUp/PageDown/Comma/Period) =====
             // Allow these keys when choosing destination, but not when in the formation dialog itself
+            // BUT: Skip if windowless dialog is active - dialogs take absolute priority
             if (WorldNavigationState.IsActive && !SettlementBrowserState.IsActive &&
-                (!CaravanFormationState.IsActive || CaravanFormationState.IsChoosingDestination))
+                (!CaravanFormationState.IsActive || CaravanFormationState.IsChoosingDestination) &&
+                !WindowlessDialogState.IsActive)
             {
                 bool handled = false;
 
@@ -289,7 +300,8 @@ namespace RimWorldAccess
             }
 
             // ===== PRIORITY 2.5: Handle area painting mode if active =====
-            if (AreaPaintingState.IsActive)
+            // BUT: Skip if windowless dialog is active - dialogs take absolute priority
+            if (AreaPaintingState.IsActive && !WindowlessDialogState.IsActive)
             {
                 MelonLoader.MelonLogger.Msg($"RimWorld Access: Area painting active, handling key {key}");
                 bool handled = false;
@@ -324,7 +336,8 @@ namespace RimWorldAccess
 
             // ===== PRIORITY 2.6: Handle trade menu if active =====
             // (but not if confirmation dialog is showing - that's handled at Priority 2.3)
-            if (TradeNavigationState.IsActive && !TradeConfirmationState.IsActive)
+            // BUT: Skip if windowless dialog is active - dialogs take absolute priority
+            if (TradeNavigationState.IsActive && !TradeConfirmationState.IsActive && !WindowlessDialogState.IsActive)
             {
                 bool handled = false;
 
