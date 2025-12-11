@@ -12,7 +12,8 @@ namespace RimWorldAccess
         Stockpile,
         DumpingStockpile,
         GrowingZone,
-        AllowedArea
+        AllowedArea,
+        HomeZone
     }
 
     /// <summary>
@@ -285,6 +286,31 @@ namespace RimWorldAccess
 
                             zoneName = $"Allowed area '{allowedArea.Label}'";
                             pendingAllowedAreaName = null; // Clear the pending name
+                        }
+                        break;
+
+                    case ZoneType.HomeZone:
+                        {
+                            // Get the home area from the area manager
+                            Area_Home homeArea = map.areaManager.Home;
+                            if (homeArea == null)
+                            {
+                                TolkHelper.Speak("Error: Home area not found", SpeechPriority.High);
+                                MelonLoader.MelonLogger.Error("Home area not found in area manager");
+                                Reset();
+                                return;
+                            }
+
+                            // Add cells to the home area
+                            foreach (IntVec3 cell in selectedCells)
+                            {
+                                if (cell.InBounds(map))
+                                {
+                                    homeArea[cell] = true; // Areas use indexer syntax
+                                }
+                            }
+
+                            zoneName = "Home zone";
                         }
                         break;
                 }
@@ -625,6 +651,8 @@ namespace RimWorldAccess
                     return "growing zone";
                 case ZoneType.AllowedArea:
                     return "allowed area";
+                case ZoneType.HomeZone:
+                    return "home zone";
                 default:
                     return "zone";
             }

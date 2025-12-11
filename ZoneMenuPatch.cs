@@ -126,6 +126,18 @@ namespace RimWorldAccess
                 ShowModeSelectionMenu(ZoneType.GrowingZone);
             }));
 
+            // Home zone option
+            options.Add(new FloatMenuOption("Home", () =>
+            {
+                ShowModeSelectionMenu(ZoneType.HomeZone);
+            }));
+
+            // Clear home zone option
+            options.Add(new FloatMenuOption("Clear home zone", () =>
+            {
+                ClearHomeZone();
+            }));
+
             // Allowed area option (at the end)
             options.Add(new FloatMenuOption("Allowed area", () =>
             {
@@ -183,6 +195,34 @@ namespace RimWorldAccess
             WindowlessFloatMenuState.Open(options, false);
 
             MelonLoader.MelonLogger.Msg($"Opened mode selection menu for {zoneType}");
+        }
+
+        /// <summary>
+        /// Clears all cells from the home zone.
+        /// </summary>
+        private static void ClearHomeZone()
+        {
+            Map map = Find.CurrentMap;
+            if (map == null)
+            {
+                TolkHelper.Speak("No map found", SpeechPriority.High);
+                MelonLoader.MelonLogger.Error("ClearHomeZone: No current map");
+                return;
+            }
+
+            Area_Home homeArea = map.areaManager.Home;
+            if (homeArea == null)
+            {
+                TolkHelper.Speak("Error: Home area not found", SpeechPriority.High);
+                MelonLoader.MelonLogger.Error("ClearHomeZone: Home area not found in area manager");
+                return;
+            }
+
+            int previousCount = homeArea.TrueCount;
+            homeArea.Clear();
+
+            TolkHelper.Speak($"Home zone cleared. {previousCount} cells removed");
+            MelonLoader.MelonLogger.Msg($"Home zone cleared: {previousCount} cells removed");
         }
     }
 
