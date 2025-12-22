@@ -60,8 +60,9 @@ namespace RimWorldAccess
             if (window is Dialog_MessageBox)
                 return true;
 
-            // Intercept Dialog_NodeTree (quest dialogs, research completion, etc.)
-            if (typeName == "Dialog_NodeTree")
+            // Intercept Dialog_NodeTree and all subclasses (quest dialogs, research completion, etc.)
+            // Walk up the type hierarchy to check for Dialog_NodeTree in the inheritance chain
+            if (IsDialogNodeTreeOrSubclass(windowType))
                 return true;
 
             // Intercept all Dialog_Rename subclasses (zone rename, area rename, etc.)
@@ -77,6 +78,31 @@ namespace RimWorldAccess
                 return true;
 
             // Don't intercept other windows by default
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if the given type is Dialog_NodeTree or a subclass of it.
+        /// Walks up the entire type hierarchy to catch indirect subclasses.
+        /// </summary>
+        private static bool IsDialogNodeTreeOrSubclass(System.Type type)
+        {
+            if (type == null)
+                return false;
+
+            // Check current type name
+            if (type.Name == "Dialog_NodeTree")
+                return true;
+
+            // Walk up the inheritance chain
+            System.Type currentType = type.BaseType;
+            while (currentType != null)
+            {
+                if (currentType.Name == "Dialog_NodeTree")
+                    return true;
+                currentType = currentType.BaseType;
+            }
+
             return false;
         }
     }

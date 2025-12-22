@@ -43,6 +43,10 @@ namespace RimWorldAccess
             if (!CaravanFormationState.IsActive)
                 return;
 
+            // Defer to WindowlessDialogState if a higher-priority dialog is active (e.g., confirmations)
+            if (WindowlessDialogState.IsActive)
+                return;
+
             // Handle keyboard input
             if (Event.current.type == EventType.KeyDown && Event.current.keyCode != KeyCode.None)
             {
