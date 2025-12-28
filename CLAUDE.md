@@ -224,6 +224,7 @@ The mod supports two approaches for audio feedback:
 - **Navigation**:
   - Up/Down: Navigate through notifications (in list view) or scroll explanation text (in detail view)
   - Enter: Open detail view (from list) or jump to target (from detail)
+  - Delete: Delete the selected letter (only letters can be deleted)
   - Escape: Go back (detail → list) or close menu (list → close)
 - Collects notifications via reflection from:
   - `Messages.liveMessages` (private static field)
