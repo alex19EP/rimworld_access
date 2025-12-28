@@ -921,6 +921,11 @@ namespace RimWorldAccess
                     NotificationMenuState.GoBack();
                     handled = true;
                 }
+                else if (key == KeyCode.Delete)
+                {
+                    NotificationMenuState.DeleteSelected();
+                    handled = true;
+                }
 
                 if (handled)
                 {
