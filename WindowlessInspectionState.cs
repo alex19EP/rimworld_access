@@ -52,7 +52,7 @@ namespace RimWorldAccess
             }
             catch (Exception ex)
             {
-                MelonLoader.MelonLogger.Error($"[RimWorldAccess] Error opening inspection menu: {ex}");
+                Log.Error($"[RimWorldAccess] Error opening inspection menu: {ex}");
                 Close();
             }
         }
@@ -98,7 +98,7 @@ namespace RimWorldAccess
             }
             catch (Exception ex)
             {
-                MelonLoader.MelonLogger.Error($"[RimWorldAccess] Error opening inspection menu for object: {ex}");
+                Log.Error($"[RimWorldAccess] Error opening inspection menu for object: {ex}");
                 Close();
             }
         }
@@ -386,7 +386,7 @@ namespace RimWorldAccess
             }
             catch (Exception ex)
             {
-                MelonLoader.MelonLogger.Error($"[RimWorldAccess] Error in AnnounceCurrentSelection: {ex}");
+                Log.Error($"[RimWorldAccess] Error in AnnounceCurrentSelection: {ex}");
             }
         }
 
@@ -463,7 +463,7 @@ namespace RimWorldAccess
             }
             catch (Exception ex)
             {
-                MelonLoader.MelonLogger.Error($"[RimWorldAccess] Error handling input in inspection menu: {ex}");
+                Log.Error($"[RimWorldAccess] Error handling input in inspection menu: {ex}");
             }
 
             return false;

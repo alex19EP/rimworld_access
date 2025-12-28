@@ -25,10 +25,65 @@ Screen reader accessibility for RimWorld. Uses the Tolk library to communicate w
 
 ## Installation
 
-1. Install RimWorld and run it once.
-2. Install MelonLoader for RimWorld. Run Mellonloader.Installer. Note that object navigation is required.
-3. Copy `rimworld_access.dll`, `Tolk.dll`, and `nvdaControllerClient64.dll` to the RimWorld Mods folder.
-4. Launch the game.
+### Step 1: Install Harmony (Required Dependency)
+
+**Steam Users:**
+1. Subscribe to Harmony on Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077
+
+**Non-Steam Users:**
+1. Download the latest Harmony release from: https://github.com/pardeike/HarmonyRimWorld/releases/latest
+2. Extract the Harmony folder to your RimWorld Mods directory (e.g., `C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\`)
+
+### Step 2: Install RimWorld Access
+
+1. Download the latest RimWorld Access release
+2. Extract the `RimWorldAccess` folder to your RimWorld Mods directory (same location as Harmony above)
+
+The folder structure should look like:
+```
+Mods\
+├── RimWorldAccess\
+│   ├── About\
+│   │   └── About.xml
+│   ├── Assemblies\
+│   │   └── rimworld_access.dll
+│   ├── Tolk.dll
+│   └── nvdaControllerClient64.dll
+└── Harmony\  (if installed manually)
+```
+
+### Step 3: Enable the Mods
+
+Since RimWorld's mod menu is not accessible with a screen reader, you must manually edit the mods configuration file.
+
+1. Close RimWorld if it is running
+2. Open the ModsConfig.xml file in a text editor. The file is located at:
+   `C:\Users\[YourUsername]\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Config\ModsConfig.xml`
+   (You can also type `%APPDATA%\..\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Config\` in File Explorer's address bar)
+3. Find the `<activeMods>` section
+4. Add the following two lines at the beginning of the list, immediately after `<activeMods>`:
+   ```xml
+   <li>brrainz.harmony</li>
+   <li>shane12300.RimWorldAccess</li>
+   ```
+5. Save the file
+
+**Example ModsConfig.xml after editing:**
+```xml
+<ModsConfigData>
+  <version>1.6.4633 rev1261</version>
+  <activeMods>
+    <li>brrainz.harmony</li>
+    <li>shane12300.RimWorldAccess</li>
+    <li>ludeon.rimworld</li>
+    <!-- other mods and DLCs... -->
+  </activeMods>
+</ModsConfigData>
+```
+
+### Step 4: Launch the Game
+
+Launch RimWorld. The mod will automatically initialize and you should hear your screen reader announce the main menu options.
 
 ## Main Menu
 
