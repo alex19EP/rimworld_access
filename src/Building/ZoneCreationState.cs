@@ -22,7 +22,6 @@ namespace RimWorldAccess
     public enum ZoneCreationMode
     {
         Manual,
-        Borders,
         Corners
     }
 
@@ -58,7 +57,7 @@ namespace RimWorldAccess
         }
 
         /// <summary>
-        /// The current creation mode (Manual, Borders, or Corners).
+        /// The current creation mode (Manual or Corners).
         /// </summary>
         public static ZoneCreationMode CurrentMode
         {
@@ -95,9 +94,7 @@ namespace RimWorldAccess
 
             string instructions = mode == ZoneCreationMode.Manual
                 ? "Press Space to select tiles, Enter to confirm, Escape to cancel. Use Shift+arrows to auto-select to wall"
-                : mode == ZoneCreationMode.Borders
-                    ? "Select border tiles with Space, then press Enter to auto-fill interior"
-                    : "Select 4 corner tiles with Space, then press Enter to fill rectangle";
+                : "Select 2 opposite corner tiles with Space, then press Enter to fill rectangle. You can then adjust cells before creating.";
 
             TolkHelper.Speak($"Creating {zoneName} in {modeName} mode. {instructions}");
             Log.Message($"Entered zone creation mode: {zoneName}, mode: {modeName}");
@@ -384,6 +381,9 @@ namespace RimWorldAccess
                     }
                 }
 
+                // Check for disconnected fragments AFTER all modifications (matches standard RimWorld behavior)
+                expandingZone.CheckContiguous();
+
                 // Build feedback message
                 string message = $"Updated {expandingZone.label}: ";
                 if (addedCount > 0 && removedCount > 0)
@@ -428,108 +428,14 @@ namespace RimWorldAccess
         }
 
         /// <summary>
-        /// Auto-fills the interior of a zone from border cells using flood fill.
-        /// Switches to Manual mode after completion.
-        /// </summary>
-        public static void BordersModeAutoFill(Map map)
-        {
-            if (selectedCells.Count == 0)
-            {
-                TolkHelper.Speak("No border cells selected. Select border tiles first", SpeechPriority.High);
-                return;
-            }
-
-            try
-            {
-                // Find the center point of the selected border cells
-                int sumX = 0, sumZ = 0;
-                foreach (IntVec3 cell in selectedCells)
-                {
-                    sumX += cell.x;
-                    sumZ += cell.z;
-                }
-                IntVec3 centerPoint = new IntVec3(sumX / selectedCells.Count, 0, sumZ / selectedCells.Count);
-
-                // Ensure center point is valid and not in the border
-                if (!centerPoint.InBounds(map))
-                {
-                    TolkHelper.Speak("Invalid border selection. Cannot find interior point", SpeechPriority.High);
-                    return;
-                }
-
-                // If center is in the border, try to find a nearby non-border cell
-                if (selectedCells.Contains(centerPoint))
-                {
-                    // Try adjacent cells
-                    bool foundStart = false;
-                    foreach (IntVec3 adjacent in GenAdj.CardinalDirections)
-                    {
-                        IntVec3 testCell = centerPoint + adjacent;
-                        if (testCell.InBounds(map) && !selectedCells.Contains(testCell) && !testCell.Impassable(map))
-                        {
-                            centerPoint = testCell;
-                            foundStart = true;
-                            break;
-                        }
-                    }
-
-                    if (!foundStart)
-                    {
-                        TolkHelper.Speak("Cannot find interior starting point. Border may be invalid", SpeechPriority.High);
-                        return;
-                    }
-                }
-
-                // Use flood fill to find all interior cells
-                List<IntVec3> interiorCells = new List<IntVec3>();
-                HashSet<IntVec3> borderSet = new HashSet<IntVec3>(selectedCells);
-
-                map.floodFiller.FloodFill(centerPoint, (IntVec3 c) =>
-                {
-                    // Can traverse if: in bounds, not a border, not impassable
-                    return c.InBounds(map) && !borderSet.Contains(c) && !c.Impassable(map);
-                }, (IntVec3 c) =>
-                {
-                    // Add to interior cells
-                    if (!borderSet.Contains(c))
-                    {
-                        interiorCells.Add(c);
-                    }
-                });
-
-                // Add all interior cells to selection
-                int addedCount = 0;
-                foreach (IntVec3 cell in interiorCells)
-                {
-                    if (!selectedCells.Contains(cell))
-                    {
-                        selectedCells.Add(cell);
-                        addedCount++;
-                    }
-                }
-
-                // Switch to manual mode
-                currentMode = ZoneCreationMode.Manual;
-
-                TolkHelper.Speak($"Filled interior with {addedCount} cells. Total: {selectedCells.Count} cells. Now in manual mode");
-                Log.Message($"Borders mode auto-fill: added {addedCount} interior cells, total {selectedCells.Count}");
-            }
-            catch (System.Exception ex)
-            {
-                TolkHelper.Speak($"Error filling interior: {ex.Message}", SpeechPriority.High);
-                Log.Error($"BordersModeAutoFill error: {ex}");
-            }
-        }
-
-        /// <summary>
-        /// Auto-fills a rectangular zone from 4 corner cells.
+        /// Auto-fills a rectangular zone from 2 corner cells.
         /// Switches to Manual mode after completion.
         /// </summary>
         public static void CornersModeAutoFill(Map map)
         {
-            if (selectedCells.Count != 4)
+            if (selectedCells.Count != 2)
             {
-                TolkHelper.Speak($"Must select exactly 4 corners. Currently selected: {selectedCells.Count}", SpeechPriority.High);
+                TolkHelper.Speak($"Must select exactly 2 opposite corners. Currently selected: {selectedCells.Count}", SpeechPriority.High);
                 return;
             }
 
@@ -667,8 +573,6 @@ namespace RimWorldAccess
             {
                 case ZoneCreationMode.Manual:
                     return "manual";
-                case ZoneCreationMode.Borders:
-                    return "borders";
                 case ZoneCreationMode.Corners:
                     return "corners";
                 default:

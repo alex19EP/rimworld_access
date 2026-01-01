@@ -204,11 +204,6 @@ namespace RimWorldAccess
                             ExecuteZonePlacement(activeDesignator, map);
                             break;
 
-                        case ZoneCreationMode.Borders:
-                            // Borders mode: auto-fill interior
-                            BordersModeAutoFill(activeDesignator, map);
-                            break;
-
                         case ZoneCreationMode.Corners:
                             // Corners mode: fill rectangle
                             CornersModeAutoFill(activeDesignator, map);
@@ -381,106 +376,13 @@ namespace RimWorldAccess
         }
 
         /// <summary>
-        /// Auto-fills the interior of a zone from border cells using flood fill (Borders mode).
-        /// </summary>
-        private static void BordersModeAutoFill(Designator designator, Map map)
-        {
-            if (ArchitectState.SelectedCells.Count == 0)
-            {
-                TolkHelper.Speak("No border cells selected. Select border tiles first", SpeechPriority.High);
-                return;
-            }
-
-            try
-            {
-                // Find the center point of the selected border cells
-                int sumX = 0, sumZ = 0;
-                foreach (IntVec3 cell in ArchitectState.SelectedCells)
-                {
-                    sumX += cell.x;
-                    sumZ += cell.z;
-                }
-                IntVec3 centerPoint = new IntVec3(sumX / ArchitectState.SelectedCells.Count, 0, sumZ / ArchitectState.SelectedCells.Count);
-
-                // Ensure center point is valid and not in the border
-                if (!centerPoint.InBounds(map))
-                {
-                    TolkHelper.Speak("Invalid border selection. Cannot find interior point", SpeechPriority.High);
-                    return;
-                }
-
-                // If center is in the border, try to find a nearby non-border cell
-                if (ArchitectState.SelectedCells.Contains(centerPoint))
-                {
-                    // Try adjacent cells
-                    bool foundStart = false;
-                    foreach (IntVec3 adjacent in GenAdj.CardinalDirections)
-                    {
-                        IntVec3 testCell = centerPoint + adjacent;
-                        if (testCell.InBounds(map) && !ArchitectState.SelectedCells.Contains(testCell) && designator.CanDesignateCell(testCell).Accepted)
-                        {
-                            centerPoint = testCell;
-                            foundStart = true;
-                            break;
-                        }
-                    }
-
-                    if (!foundStart)
-                    {
-                        TolkHelper.Speak("Cannot find interior starting point. Border may be invalid", SpeechPriority.High);
-                        return;
-                    }
-                }
-
-                // Use flood fill to find all interior cells
-                List<IntVec3> interiorCells = new List<IntVec3>();
-                HashSet<IntVec3> borderSet = new HashSet<IntVec3>(ArchitectState.SelectedCells);
-
-                map.floodFiller.FloodFill(centerPoint, (IntVec3 c) =>
-                {
-                    // Can traverse if: in bounds, not a border, and designator can place here
-                    return c.InBounds(map) && !borderSet.Contains(c) && designator.CanDesignateCell(c).Accepted;
-                }, (IntVec3 c) =>
-                {
-                    // Add to interior cells
-                    if (!borderSet.Contains(c))
-                    {
-                        interiorCells.Add(c);
-                    }
-                });
-
-                // Add all interior cells to selection
-                int addedCount = 0;
-                foreach (IntVec3 cell in interiorCells)
-                {
-                    if (!ArchitectState.SelectedCells.Contains(cell))
-                    {
-                        ArchitectState.SelectedCells.Add(cell);
-                        addedCount++;
-                    }
-                }
-
-                TolkHelper.Speak($"Filled interior with {addedCount} cells. Total: {ArchitectState.SelectedCells.Count} cells. Creating zone");
-                Log.Message($"Borders mode auto-fill: added {addedCount} interior cells, total {ArchitectState.SelectedCells.Count}");
-
-                // Now execute the placement
-                ExecuteZonePlacement(designator, map);
-            }
-            catch (System.Exception ex)
-            {
-                TolkHelper.Speak($"Error filling interior: {ex.Message}", SpeechPriority.High);
-                Log.Error($"BordersModeAutoFill error: {ex}");
-            }
-        }
-
-        /// <summary>
-        /// Auto-fills a rectangular zone from 4 corner cells (Corners mode).
+        /// Auto-fills a rectangular zone from 2 corner cells (Corners mode).
         /// </summary>
         private static void CornersModeAutoFill(Designator designator, Map map)
         {
-            if (ArchitectState.SelectedCells.Count != 4)
+            if (ArchitectState.SelectedCells.Count != 2)
             {
-                TolkHelper.Speak($"Must select exactly 4 corners. Currently selected: {ArchitectState.SelectedCells.Count}", SpeechPriority.High);
+                TolkHelper.Speak($"Must select exactly 2 opposite corners. Currently selected: {ArchitectState.SelectedCells.Count}", SpeechPriority.High);
                 return;
             }
 
@@ -522,13 +424,13 @@ namespace RimWorldAccess
                 // Add all rectangle cells to selection
                 ArchitectState.SelectedCells.AddRange(rectangleCells);
 
+                // Switch to manual mode so user can adjust cells before creating
+                ArchitectState.SetZoneCreationMode(ZoneCreationMode.Manual);
+
                 int width = maxX - minX + 1;
                 int height = maxZ - minZ + 1;
-                TolkHelper.Speak($"Filled {width} by {height} rectangle. Total: {ArchitectState.SelectedCells.Count} cells. Creating zone");
-                Log.Message($"Corners mode auto-fill: {width}x{height} rectangle, total {ArchitectState.SelectedCells.Count} cells");
-
-                // Now execute the placement
-                ExecuteZonePlacement(designator, map);
+                TolkHelper.Speak($"Filled {width} by {height} rectangle. Total: {ArchitectState.SelectedCells.Count} cells. Now in manual mode, press Enter to create zone");
+                Log.Message($"Corners mode auto-fill: {width}x{height} rectangle, total {ArchitectState.SelectedCells.Count} cells. Switched to manual mode");
             }
             catch (System.Exception ex)
             {

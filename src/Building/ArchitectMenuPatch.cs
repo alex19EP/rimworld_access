@@ -329,7 +329,7 @@ namespace RimWorldAccess
         }
 
         /// <summary>
-        /// Shows the mode selection menu for zone creation (Manual, Borders, Corners).
+        /// Shows the mode selection menu for zone creation (Manual or Corners).
         /// Stores the designator for later use.
         /// </summary>
         private static void ShowZoneModeSelectionMenu(Designator designator)
@@ -340,12 +340,6 @@ namespace RimWorldAccess
             options.Add(new FloatMenuOption("Manual selection", () =>
             {
                 OnZoneModeSelected(designator, ZoneCreationMode.Manual);
-            }));
-
-            // Borders mode
-            options.Add(new FloatMenuOption("Borders mode", () =>
-            {
-                OnZoneModeSelected(designator, ZoneCreationMode.Borders);
             }));
 
             // Corners mode

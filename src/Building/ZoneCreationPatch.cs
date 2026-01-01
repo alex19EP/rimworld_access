@@ -99,11 +99,6 @@ namespace RimWorldAccess
                         ZoneCreationState.CreateZone(map);
                         break;
 
-                    case ZoneCreationMode.Borders:
-                        // Borders mode: auto-fill interior, then switch to manual
-                        ZoneCreationState.BordersModeAutoFill(map);
-                        break;
-
                     case ZoneCreationMode.Corners:
                         // Corners mode: fill rectangle, then switch to manual
                         ZoneCreationState.CornersModeAutoFill(map);
