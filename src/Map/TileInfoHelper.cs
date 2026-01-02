@@ -22,9 +22,9 @@ namespace RimWorldAccess
                 return "Out of bounds";
 
 
-            // Check fog of war - if fogged, return "unseen" immediately
+            // Check fog of war - if fogged, return "unseen" with coordinates
             if (position.Fogged(map))
-                return "unseen";
+                return $"unseen, {position.x}, {position.z}";
             var sb = new StringBuilder();
 
             // Check visibility from drafted pawn FIRST (if one is selected)
@@ -169,13 +169,15 @@ namespace RimWorldAccess
             }
 
             // Add roofed status (only if roofed, not unroofed)
+            // Natural rock roof (overhead mountain) = "underground", constructed roof = "roofed"
             RoofDef roof = position.GetRoof(map);
             if (roof != null)
             {
+                string roofText = roof.isNatural ? "underground" : "roofed";
                 if (addedSomething)
-                    sb.Append(", roofed");
+                    sb.Append(", " + roofText);
                 else
-                    sb.Append("roofed");
+                    sb.Append(roofText);
                 addedSomething = true;
             }
 
