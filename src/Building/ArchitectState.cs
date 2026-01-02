@@ -35,12 +35,8 @@ namespace RimWorldAccess
         private static List<IntVec3> selectedCells = new List<IntVec3>();
         private static Rot4 currentRotation = Rot4.North;
 
-        // Rectangle selection state for zone designators
-        private static IntVec3? rectangleStart = null;
-        private static IntVec3? rectangleEnd = null;
-        private static List<IntVec3> previewCells = new List<IntVec3>();
-        private static int lastCellCount = 0;
-        private static float lastDragRealTime = 0f;
+        // Rectangle selection helper (shared logic for rectangle-based selection)
+        private static readonly RectangleSelectionHelper rectangleHelper = new RectangleSelectionHelper();
 
         // Reflection field info for accessing protected placingRot field
         private static FieldInfo placingRotField = AccessTools.Field(typeof(Designator_Place), "placingRot");
@@ -97,27 +93,27 @@ namespace RimWorldAccess
         /// <summary>
         /// Whether a rectangle start corner has been set.
         /// </summary>
-        public static bool HasRectangleStart => rectangleStart.HasValue;
+        public static bool HasRectangleStart => rectangleHelper.HasRectangleStart;
 
         /// <summary>
         /// Whether we are actively previewing a rectangle (start and end set).
         /// </summary>
-        public static bool IsInPreviewMode => rectangleStart.HasValue && rectangleEnd.HasValue;
+        public static bool IsInPreviewMode => rectangleHelper.IsInPreviewMode;
 
         /// <summary>
         /// The start corner of the rectangle being selected.
         /// </summary>
-        public static IntVec3? RectangleStart => rectangleStart;
+        public static IntVec3? RectangleStart => rectangleHelper.RectangleStart;
 
         /// <summary>
         /// The end corner of the rectangle being selected.
         /// </summary>
-        public static IntVec3? RectangleEnd => rectangleEnd;
+        public static IntVec3? RectangleEnd => rectangleHelper.RectangleEnd;
 
         /// <summary>
         /// Cells in the current rectangle preview.
         /// </summary>
-        public static IReadOnlyList<IntVec3> PreviewCells => previewCells;
+        public static IReadOnlyList<IntVec3> PreviewCells => rectangleHelper.PreviewCells;
 
         /// <summary>
         /// Enters category selection mode.
@@ -445,12 +441,7 @@ namespace RimWorldAccess
         /// </summary>
         public static void SetRectangleStart(IntVec3 cell)
         {
-            rectangleStart = cell;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
-            lastDragRealTime = Time.realtimeSinceStartup;
-            TolkHelper.Speak($"Start at {cell.x}, {cell.z}");
+            rectangleHelper.SetStart(cell);
         }
 
         /// <summary>
@@ -459,37 +450,7 @@ namespace RimWorldAccess
         /// </summary>
         public static void UpdatePreview(IntVec3 endCell)
         {
-            if (!rectangleStart.HasValue) return;
-
-            rectangleEnd = endCell;
-
-            // Use native CellRect API for rectangle calculation
-            CellRect rect = CellRect.FromLimits(rectangleStart.Value, endCell);
-            previewCells = rect.Cells.ToList();
-
-            int width = rect.Width;
-            int height = rect.Height;
-            int cellCount = previewCells.Count;
-
-            // Play native sound when cell count changes (like DesignationDragger)
-            if (cellCount != lastCellCount)
-            {
-                SoundInfo info = SoundInfo.OnCamera();
-                info.SetParameter("TimeSinceDrag", Time.realtimeSinceStartup - lastDragRealTime);
-                SoundDefOf.Designate_DragStandard_Changed.PlayOneShot(info);
-                lastDragRealTime = Time.realtimeSinceStartup;
-                lastCellCount = cellCount;
-
-                // Announce dimensions like native display (only when >= 5 cells)
-                if (width >= 5 || height >= 5)
-                {
-                    TolkHelper.Speak($"{width} by {height}", SpeechPriority.Low);
-                }
-                else if (cellCount >= 4)
-                {
-                    TolkHelper.Speak($"{cellCount}", SpeechPriority.Low);
-                }
-            }
+            rectangleHelper.UpdatePreview(endCell);
         }
 
         /// <summary>
@@ -497,31 +458,11 @@ namespace RimWorldAccess
         /// </summary>
         public static void ConfirmRectangle()
         {
-            if (!IsInPreviewMode)
+            rectangleHelper.ConfirmRectangle(selectedCells, out var newCells);
+            foreach (var cell in newCells)
             {
-                TolkHelper.Speak("No rectangle to confirm");
-                return;
+                selectedCells.Add(cell);
             }
-
-            // Add preview cells to selection (avoiding duplicates)
-            int addedCount = 0;
-            foreach (var cell in previewCells)
-            {
-                if (!selectedCells.Contains(cell))
-                {
-                    selectedCells.Add(cell);
-                    addedCount++;
-                }
-            }
-
-            CellRect rect = CellRect.FromLimits(rectangleStart.Value, rectangleEnd.Value);
-            TolkHelper.Speak($"{rect.Width} by {rect.Height}, {addedCount} cells added. Total: {selectedCells.Count}");
-
-            // Clear rectangle state for next selection
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
         }
 
         /// <summary>
@@ -529,16 +470,7 @@ namespace RimWorldAccess
         /// </summary>
         public static void CancelRectangle()
         {
-            if (!HasRectangleStart)
-            {
-                return;
-            }
-
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
-            TolkHelper.Speak("Rectangle cancelled");
+            rectangleHelper.Cancel();
         }
 
         /// <summary>
@@ -620,10 +552,7 @@ namespace RimWorldAccess
             currentRotation = Rot4.North;
 
             // Clear rectangle selection state
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
+            rectangleHelper.Reset();
 
             // Deselect any active designator in the game
             if (Find.DesignatorManager != null)

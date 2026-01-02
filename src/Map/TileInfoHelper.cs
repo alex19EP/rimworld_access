@@ -639,26 +639,23 @@ namespace RimWorldAccess
 
             // Show ALL non-hidden stats like the game does in EnvironmentStatsDrawer.DoRoomInfo
             // Format: "StatLabel: TierLabel (value)" with asterisk for important stats
-            List<RoomStatDef> allDefs = DefDatabase<RoomStatDef>.AllDefsListForReading;
-            foreach (RoomStatDef statDef in allDefs)
+            var visibleStats = DefDatabase<RoomStatDef>.AllDefsListForReading.Where(def => !def.isHidden);
+            foreach (RoomStatDef statDef in visibleStats)
             {
-                if (!statDef.isHidden)
+                float value = room.GetStat(statDef);
+                RoomStatScoreStage stage = statDef.GetScoreStage(value);
+                string stageLabel = stage?.label?.CapitalizeFirst() ?? "";
+
+                // Mark important stats for this room type with asterisk
+                string prefix = (room.Role != null && room.Role.IsStatRelated(statDef)) ? "*" : "";
+
+                if (!string.IsNullOrEmpty(stageLabel))
                 {
-                    float value = room.GetStat(statDef);
-                    RoomStatScoreStage stage = statDef.GetScoreStage(value);
-                    string stageLabel = stage?.label?.CapitalizeFirst() ?? "";
-
-                    // Mark important stats for this room type with asterisk
-                    string prefix = (room.Role != null && room.Role.IsStatRelated(statDef)) ? "*" : "";
-
-                    if (!string.IsNullOrEmpty(stageLabel))
-                    {
-                        sb.Append($", {prefix}{statDef.LabelCap}: {stageLabel} ({statDef.ScoreToString(value)})");
-                    }
-                    else
-                    {
-                        sb.Append($", {prefix}{statDef.LabelCap}: {statDef.ScoreToString(value)}");
-                    }
+                    sb.Append($", {prefix}{statDef.LabelCap}: {stageLabel} ({statDef.ScoreToString(value)})");
+                }
+                else
+                {
+                    sb.Append($", {prefix}{statDef.LabelCap}: {statDef.ScoreToString(value)}");
                 }
             }
 

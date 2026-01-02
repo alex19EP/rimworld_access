@@ -112,64 +112,57 @@ namespace RimWorldAccess
             // Store the current selection to restore it later
             var previousSelection = Find.Selector.SelectedObjects.ToList();
 
-            // Check for zone at cursor position and collect its gizmos
-            Zone zone = cursorPosition.GetZone(map);
-            if (zone != null)
+            try
             {
-                // Temporarily select the zone so its gizmos' Visible property works correctly
-                Find.Selector.ClearSelection();
-                Find.Selector.Select(zone, playSound: false, forceDesignatorDeselect: false);
-
-                var zoneGizmos = zone.GetGizmos().ToList();
-                foreach (Gizmo gizmo in zoneGizmos)
+                // Check for zone at cursor position and collect its gizmos
+                Zone zone = cursorPosition.GetZone(map);
+                if (zone != null)
                 {
-                    if (gizmo != null && gizmo.Visible)
+                    // Temporarily select the zone so its gizmos' Visible property works correctly
+                    Find.Selector.ClearSelection();
+                    Find.Selector.Select(zone, playSound: false, forceDesignatorDeselect: false);
+
+                    var zoneGizmos = zone.GetGizmos().ToList();
+                    foreach (Gizmo gizmo in zoneGizmos.Where(g => g != null && g.Visible))
                     {
                         availableGizmos.Add(gizmo);
                         gizmoOwners[gizmo] = zone;
                     }
                 }
-            }
 
-            // Get all things at the cursor position
-            List<Thing> thingsAtPosition = cursorPosition.GetThingList(map);
+                // Get all things at the cursor position
+                List<Thing> thingsAtPosition = cursorPosition.GetThingList(map);
 
-            // Collect gizmos from all things at this position
-            // Important: Temporarily select each thing before getting its gizmos,
-            // because some gizmos (like Designator_Install) check if the thing is selected
-            // to determine their Visible property
-            if (thingsAtPosition != null)
-            {
-                foreach (Thing thing in thingsAtPosition)
+                // Collect gizmos from all things at this position
+                // Important: Temporarily select each thing before getting its gizmos,
+                // because some gizmos (like Designator_Install) check if the thing is selected
+                // to determine their Visible property
+                if (thingsAtPosition != null)
                 {
-                    if (thing is ISelectable selectable)
+                    foreach (ISelectable selectable in thingsAtPosition.OfType<ISelectable>())
                     {
                         // Temporarily select this thing so its gizmos' Visible property works correctly
                         Find.Selector.ClearSelection();
-                        Find.Selector.Select(thing, playSound: false, forceDesignatorDeselect: false);
+                        Find.Selector.Select(selectable, playSound: false, forceDesignatorDeselect: false);
 
                         var gizmos = selectable.GetGizmos().ToList();
-                        foreach (Gizmo gizmo in gizmos)
+                        foreach (Gizmo gizmo in gizmos.Where(g => g != null && g.Visible))
                         {
                             // Check Visible NOW while thing is still selected
                             // (some gizmos like Designator_Install check selection state)
-                            if (gizmo != null && gizmo.Visible)
-                            {
-                                availableGizmos.Add(gizmo);
-                                gizmoOwners[gizmo] = selectable;
-                            }
+                            availableGizmos.Add(gizmo);
+                            gizmoOwners[gizmo] = selectable;
                         }
                     }
                 }
             }
-
-            // Restore previous selection (or clear if nothing was selected)
-            Find.Selector.ClearSelection();
-            foreach (var obj in previousSelection)
+            finally
             {
-                if (obj is ISelectable selectableObj)
+                // Restore previous selection (or clear if nothing was selected)
+                Find.Selector.ClearSelection();
+                foreach (var obj in previousSelection.OfType<ISelectable>())
                 {
-                    Find.Selector.Select(selectableObj, playSound: false, forceDesignatorDeselect: false);
+                    Find.Selector.Select(obj, playSound: false, forceDesignatorDeselect: false);
                 }
             }
 
@@ -274,25 +267,24 @@ namespace RimWorldAccess
                     string designatorTypeName = designator.GetType().Name;
 
                     // Zone expand designators (Designator_ZoneAdd*_Expand)
-                    if (designatorTypeName.Contains("_Expand") && designatorTypeName.Contains("ZoneAdd"))
+                    if (designatorTypeName.Contains("_Expand")
+                        && designatorTypeName.Contains("ZoneAdd")
+                        && gizmoOwners.TryGetValue(selectedGizmo, out ISelectable expandOwner)
+                        && expandOwner is Zone expandZone)
                     {
-                        if (gizmoOwners.TryGetValue(selectedGizmo, out ISelectable owner) && owner is Zone expandZone)
-                        {
-                            Close();
-                            ZoneCreationState.EnterExpansionMode(expandZone);
-                            return;
-                        }
+                        Close();
+                        ZoneCreationState.EnterExpansionMode(expandZone);
+                        return;
                     }
 
                     // Zone shrink designator - enter shrink mode (selected cells will be removed)
-                    if (designatorTypeName == "Designator_ZoneDelete_Shrink")
+                    if (designatorTypeName == "Designator_ZoneDelete_Shrink"
+                        && gizmoOwners.TryGetValue(selectedGizmo, out ISelectable shrinkOwner)
+                        && shrinkOwner is Zone shrinkZone)
                     {
-                        if (gizmoOwners.TryGetValue(selectedGizmo, out ISelectable owner) && owner is Zone shrinkZone)
-                        {
-                            Close();
-                            ZoneCreationState.EnterShrinkMode(shrinkZone);
-                            return;
-                        }
+                        Close();
+                        ZoneCreationState.EnterShrinkMode(shrinkZone);
+                        return;
                     }
 
                     // For Designators opened via cursor objects (not selected pawns),
@@ -344,14 +336,13 @@ namespace RimWorldAccess
                 }
 
                 // 2. Command_SetPlantToGrow - open accessible plant selection menu
-                if (selectedGizmo is Command_SetPlantToGrow)
+                if (selectedGizmo is Command_SetPlantToGrow
+                    && gizmoOwners.TryGetValue(selectedGizmo, out ISelectable plantOwner)
+                    && plantOwner is IPlantToGrowSettable plantSettable)
                 {
-                    if (gizmoOwners.TryGetValue(selectedGizmo, out ISelectable owner) && owner is IPlantToGrowSettable plantSettable)
-                    {
-                        Close();
-                        PlantSelectionMenuState.Open(plantSettable);
-                        return;
-                    }
+                    Close();
+                    PlantSelectionMenuState.Open(plantSettable);
+                    return;
                 }
 
                 // 3. Command_Toggle - toggle and announce state

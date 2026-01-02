@@ -19,14 +19,8 @@ namespace RimWorldAccess
         private static bool isExpanding = true; // true = expand, false = shrink
         private static List<IntVec3> stagedCells = new List<IntVec3>(); // Cells staged for addition/removal
 
-        // Rectangle selection state
-        private static IntVec3? rectangleStart = null;
-        private static IntVec3? rectangleEnd = null;
-        private static List<IntVec3> previewCells = new List<IntVec3>();
-
-        // For native sound feedback (matches DesignationDragger behavior)
-        private static int lastCellCount = 0;
-        private static float lastDragRealTime = 0f;
+        // Rectangle selection helper (shared logic for rectangle-based selection)
+        private static readonly RectangleSelectionHelper rectangleHelper = new RectangleSelectionHelper();
 
         /// <summary>
         /// Whether area painting mode is currently active.
@@ -51,27 +45,27 @@ namespace RimWorldAccess
         /// <summary>
         /// Whether a rectangle start corner has been set.
         /// </summary>
-        public static bool HasRectangleStart => rectangleStart.HasValue;
+        public static bool HasRectangleStart => rectangleHelper.HasRectangleStart;
 
         /// <summary>
         /// Whether we are actively previewing a rectangle (start and end set).
         /// </summary>
-        public static bool IsInPreviewMode => rectangleStart.HasValue && rectangleEnd.HasValue;
+        public static bool IsInPreviewMode => rectangleHelper.IsInPreviewMode;
 
         /// <summary>
         /// The start corner of the rectangle being selected.
         /// </summary>
-        public static IntVec3? RectangleStart => rectangleStart;
+        public static IntVec3? RectangleStart => rectangleHelper.RectangleStart;
 
         /// <summary>
         /// The end corner of the rectangle being selected.
         /// </summary>
-        public static IntVec3? RectangleEnd => rectangleEnd;
+        public static IntVec3? RectangleEnd => rectangleHelper.RectangleEnd;
 
         /// <summary>
         /// Cells in the current rectangle preview.
         /// </summary>
-        public static IReadOnlyList<IntVec3> PreviewCells => previewCells;
+        public static IReadOnlyList<IntVec3> PreviewCells => rectangleHelper.PreviewCells;
 
         /// <summary>
         /// Enters area painting mode for expanding an area.
@@ -84,11 +78,7 @@ namespace RimWorldAccess
             targetArea = area;
             isExpanding = true;
             stagedCells.Clear();
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
-            lastDragRealTime = Time.realtimeSinceStartup;
+            rectangleHelper.Reset();
 
             Log.Message($"RimWorld Access: isActive set to {isActive}, targetArea set to {targetArea?.Label}");
 
@@ -112,11 +102,7 @@ namespace RimWorldAccess
             targetArea = area;
             isExpanding = false;
             stagedCells.Clear();
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
-            lastDragRealTime = Time.realtimeSinceStartup;
+            rectangleHelper.Reset();
 
             // Ensure map navigation is initialized
             if (!MapNavigationState.IsInitialized && area.Map != null)
@@ -132,12 +118,7 @@ namespace RimWorldAccess
         /// </summary>
         public static void SetRectangleStart(IntVec3 cell)
         {
-            rectangleStart = cell;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
-            lastDragRealTime = Time.realtimeSinceStartup;
-            TolkHelper.Speak($"Start at {cell.x}, {cell.z}");
+            rectangleHelper.SetStart(cell);
         }
 
         /// <summary>
@@ -146,37 +127,7 @@ namespace RimWorldAccess
         /// </summary>
         public static void UpdatePreview(IntVec3 endCell)
         {
-            if (!rectangleStart.HasValue) return;
-
-            rectangleEnd = endCell;
-
-            // Use native CellRect API for rectangle calculation
-            CellRect rect = CellRect.FromLimits(rectangleStart.Value, endCell);
-            previewCells = rect.Cells.ToList();
-
-            int width = rect.Width;
-            int height = rect.Height;
-            int cellCount = previewCells.Count;
-
-            // Play native sound when cell count changes (like DesignationDragger)
-            if (cellCount != lastCellCount)
-            {
-                SoundInfo info = SoundInfo.OnCamera();
-                info.SetParameter("TimeSinceDrag", Time.realtimeSinceStartup - lastDragRealTime);
-                SoundDefOf.Designate_DragStandard_Changed.PlayOneShot(info);
-                lastDragRealTime = Time.realtimeSinceStartup;
-                lastCellCount = cellCount;
-
-                // Announce dimensions like native display (only when >= 5 cells)
-                if (width >= 5 || height >= 5)
-                {
-                    TolkHelper.Speak($"{width} by {height}", SpeechPriority.Low);
-                }
-                else if (cellCount >= 4)
-                {
-                    TolkHelper.Speak($"{cellCount}", SpeechPriority.Low);
-                }
-            }
+            rectangleHelper.UpdatePreview(endCell);
         }
 
         /// <summary>
@@ -184,31 +135,11 @@ namespace RimWorldAccess
         /// </summary>
         public static void ConfirmRectangle()
         {
-            if (!IsInPreviewMode)
+            rectangleHelper.ConfirmRectangle(stagedCells, out var newCells);
+            foreach (var cell in newCells)
             {
-                TolkHelper.Speak("No rectangle to confirm");
-                return;
+                stagedCells.Add(cell);
             }
-
-            // Add preview cells to staged (avoiding duplicates)
-            int addedCount = 0;
-            foreach (var cell in previewCells)
-            {
-                if (!stagedCells.Contains(cell))
-                {
-                    stagedCells.Add(cell);
-                    addedCount++;
-                }
-            }
-
-            CellRect rect = CellRect.FromLimits(rectangleStart.Value, rectangleEnd.Value);
-            TolkHelper.Speak($"{rect.Width} by {rect.Height}, {addedCount} cells added. Total staged: {stagedCells.Count}");
-
-            // Clear rectangle state for next selection
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
         }
 
         /// <summary>
@@ -216,16 +147,7 @@ namespace RimWorldAccess
         /// </summary>
         public static void CancelRectangle()
         {
-            if (!HasRectangleStart)
-            {
-                return;
-            }
-
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
-            lastCellCount = 0;
-            TolkHelper.Speak("Rectangle cancelled");
+            rectangleHelper.Cancel();
         }
 
         /// <summary>
@@ -310,9 +232,7 @@ namespace RimWorldAccess
             isActive = false;
             targetArea = null;
             stagedCells.Clear();
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
+            rectangleHelper.Reset();
         }
 
         /// <summary>
@@ -330,9 +250,7 @@ namespace RimWorldAccess
             isActive = false;
             targetArea = null;
             stagedCells.Clear();
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
+            rectangleHelper.Reset();
 
             Log.Message("RimWorld Access: Area painting cancelled");
         }
@@ -347,9 +265,7 @@ namespace RimWorldAccess
             isActive = false;
             targetArea = null;
             stagedCells.Clear();
-            rectangleStart = null;
-            rectangleEnd = null;
-            previewCells.Clear();
+            rectangleHelper.Reset();
 
             Log.Message("RimWorld Access: Area painting mode exited");
         }
