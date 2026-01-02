@@ -382,23 +382,55 @@ namespace RimWorldAccess
                 if (key == KeyCode.Space)
                 {
                     Log.Message("RimWorld Access: Space pressed in area painting mode");
-                    AreaPaintingState.ToggleStageCell();
+                    IntVec3 currentPosition = MapNavigationState.CurrentCursorPosition;
+
+                    if (!AreaPaintingState.HasRectangleStart)
+                    {
+                        // No start corner yet - set it
+                        AreaPaintingState.SetRectangleStart(currentPosition);
+                    }
+                    else if (AreaPaintingState.IsInPreviewMode)
+                    {
+                        // We have a preview - confirm this rectangle
+                        AreaPaintingState.ConfirmRectangle();
+                    }
+                    else
+                    {
+                        // Start is set but no end yet - update to create preview at current position
+                        AreaPaintingState.UpdatePreview(currentPosition);
+                        // Then confirm it
+                        AreaPaintingState.ConfirmRectangle();
+                    }
                     handled = true;
                 }
                 else if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
                 {
                     Log.Message("RimWorld Access: Enter pressed in area painting mode");
+                    // If in preview mode, confirm the rectangle first
+                    if (AreaPaintingState.IsInPreviewMode)
+                    {
+                        AreaPaintingState.ConfirmRectangle();
+                    }
+                    // Then confirm the area painting
                     AreaPaintingState.Confirm();
                     handled = true;
                 }
                 else if (key == KeyCode.Escape)
                 {
                     Log.Message("RimWorld Access: Escape pressed in area painting mode");
-                    AreaPaintingState.Cancel();
+                    if (AreaPaintingState.HasRectangleStart)
+                    {
+                        // Cancel current rectangle selection
+                        AreaPaintingState.CancelRectangle();
+                    }
+                    else
+                    {
+                        // No rectangle in progress - cancel entire area painting
+                        AreaPaintingState.Cancel();
+                    }
                     handled = true;
                 }
                 // Note: Arrow keys are NOT handled here - they pass through to MapNavigationPatch
-                // The ZoneCreationAnnouncementPatch postfix will add "Selected" prefix if needed
 
                 if (handled)
                 {

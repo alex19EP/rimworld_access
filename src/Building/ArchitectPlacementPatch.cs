@@ -97,8 +97,8 @@ namespace RimWorldAccess
                 }
                 handled = true;
             }
-            // Shift+Arrow keys - auto-select to wall (only for zone designators in Manual mode)
-            else if (shiftHeld && isZoneDesignator && ArchitectState.ZoneCreationMode == ZoneCreationMode.Manual)
+            // Shift+Arrow keys - auto-select to wall (for zone designators)
+            else if (shiftHeld && isZoneDesignator)
             {
                 IntVec3 currentPosition = MapNavigationState.CurrentCursorPosition;
                 Map map = Find.CurrentMap;
@@ -119,7 +119,7 @@ namespace RimWorldAccess
                     handled = true;
                 }
             }
-            // Space key - toggle selection of current cell
+            // Space key - rectangle selection for zones, instant placement for buildings
             else if (key == KeyCode.Space)
             {
                 // Cooldown to prevent rapid toggling
@@ -130,12 +130,28 @@ namespace RimWorldAccess
 
                 IntVec3 currentPosition = MapNavigationState.CurrentCursorPosition;
 
-                // For zone designators, use multi-cell selection with mode support
+                // For zone designators, use rectangle selection
                 if (isZoneDesignator)
                 {
                     if (inArchitectMode)
                     {
-                        ArchitectState.ToggleCell(currentPosition);
+                        if (!ArchitectState.HasRectangleStart)
+                        {
+                            // No start corner yet - set it
+                            ArchitectState.SetRectangleStart(currentPosition);
+                        }
+                        else if (ArchitectState.IsInPreviewMode)
+                        {
+                            // We have a preview - confirm this rectangle
+                            ArchitectState.ConfirmRectangle();
+                        }
+                        else
+                        {
+                            // Start is set but no end yet - update to create preview at current position
+                            ArchitectState.UpdatePreview(currentPosition);
+                            // Then confirm it
+                            ArchitectState.ConfirmRectangle();
+                        }
                     }
                 }
                 // For build/place designators (including Designator_Install), place immediately
@@ -191,25 +207,16 @@ namespace RimWorldAccess
             // Enter key - confirm and execute designation (for multi-cell designators)
             else if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
             {
-                // For zone designators, handle according to mode
+                // For zone designators, execute placement immediately
                 if (isZoneDesignator && inArchitectMode)
                 {
-                    ZoneCreationMode mode = ArchitectState.ZoneCreationMode;
-                    Map map = Find.CurrentMap;
-
-                    switch (mode)
+                    // If in preview mode, confirm the rectangle first
+                    if (ArchitectState.IsInPreviewMode)
                     {
-                        case ZoneCreationMode.Manual:
-                            // Manual mode: execute placement immediately
-                            ExecuteZonePlacement(activeDesignator, map);
-                            break;
-
-                        case ZoneCreationMode.Corners:
-                            // Corners mode: fill rectangle
-                            CornersModeAutoFill(activeDesignator, map);
-                            break;
+                        ArchitectState.ConfirmRectangle();
                     }
-
+                    Map map = Find.CurrentMap;
+                    ExecuteZonePlacement(activeDesignator, map);
                     handled = true;
                 }
                 // For place designators (build, reinstall), Enter exits placement mode
@@ -229,14 +236,22 @@ namespace RimWorldAccess
                     handled = true;
                 }
             }
-            // Escape key - cancel placement
+            // Escape key - cancel rectangle or cancel placement
             else if (key == KeyCode.Escape)
             {
-                TolkHelper.Speak("Placement cancelled");
-                if (inArchitectMode)
-                    ArchitectState.Cancel();
+                if (inArchitectMode && ArchitectState.HasRectangleStart)
+                {
+                    // Cancel current rectangle selection but stay in placement mode
+                    ArchitectState.CancelRectangle();
+                }
                 else
-                    Find.DesignatorManager.Deselect();
+                {
+                    TolkHelper.Speak("Placement cancelled");
+                    if (inArchitectMode)
+                        ArchitectState.Cancel();
+                    else
+                        Find.DesignatorManager.Deselect();
+                }
                 handled = true;
             }
 
@@ -344,7 +359,7 @@ namespace RimWorldAccess
         }
 
         /// <summary>
-        /// Executes zone placement in Manual mode.
+        /// Executes zone placement with all selected cells.
         /// </summary>
         private static void ExecuteZonePlacement(Designator designator, Map map)
         {
@@ -375,69 +390,6 @@ namespace RimWorldAccess
             }
         }
 
-        /// <summary>
-        /// Auto-fills a rectangular zone from 2 corner cells (Corners mode).
-        /// </summary>
-        private static void CornersModeAutoFill(Designator designator, Map map)
-        {
-            if (ArchitectState.SelectedCells.Count != 2)
-            {
-                TolkHelper.Speak($"Must select exactly 2 opposite corners. Currently selected: {ArchitectState.SelectedCells.Count}", SpeechPriority.High);
-                return;
-            }
-
-            try
-            {
-                // Find min and max X and Z coordinates
-                int minX = int.MaxValue, maxX = int.MinValue;
-                int minZ = int.MaxValue, maxZ = int.MinValue;
-
-                foreach (IntVec3 corner in ArchitectState.SelectedCells)
-                {
-                    if (corner.x < minX) minX = corner.x;
-                    if (corner.x > maxX) maxX = corner.x;
-                    if (corner.z < minZ) minZ = corner.z;
-                    if (corner.z > maxZ) maxZ = corner.z;
-                }
-
-                // Validate rectangle size
-                if (minX >= maxX || minZ >= maxZ)
-                {
-                    TolkHelper.Speak("Invalid corner selection. Corners must form a rectangle", SpeechPriority.High);
-                    return;
-                }
-
-                // Fill all cells in the bounding rectangle
-                List<IntVec3> rectangleCells = new List<IntVec3>();
-                for (int x = minX; x <= maxX; x++)
-                {
-                    for (int z = minZ; z <= maxZ; z++)
-                    {
-                        IntVec3 cell = new IntVec3(x, 0, z);
-                        if (cell.InBounds(map) && !ArchitectState.SelectedCells.Contains(cell))
-                        {
-                            rectangleCells.Add(cell);
-                        }
-                    }
-                }
-
-                // Add all rectangle cells to selection
-                ArchitectState.SelectedCells.AddRange(rectangleCells);
-
-                // Switch to manual mode so user can adjust cells before creating
-                ArchitectState.SetZoneCreationMode(ZoneCreationMode.Manual);
-
-                int width = maxX - minX + 1;
-                int height = maxZ - minZ + 1;
-                TolkHelper.Speak($"Filled {width} by {height} rectangle. Total: {ArchitectState.SelectedCells.Count} cells. Now in manual mode, press Enter to create zone");
-                Log.Message($"Corners mode auto-fill: {width}x{height} rectangle, total {ArchitectState.SelectedCells.Count} cells. Switched to manual mode");
-            }
-            catch (System.Exception ex)
-            {
-                TolkHelper.Speak($"Error filling rectangle: {ex.Message}", SpeechPriority.High);
-                Log.Error($"CornersModeAutoFill error: {ex}");
-            }
-        }
     }
 
     /// <summary>

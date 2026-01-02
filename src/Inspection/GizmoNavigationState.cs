@@ -284,13 +284,13 @@ namespace RimWorldAccess
                         }
                     }
 
-                    // Zone shrink designator - uses same expansion mode (toggle cells off to shrink)
+                    // Zone shrink designator - enter shrink mode (selected cells will be removed)
                     if (designatorTypeName == "Designator_ZoneDelete_Shrink")
                     {
                         if (gizmoOwners.TryGetValue(selectedGizmo, out ISelectable owner) && owner is Zone shrinkZone)
                         {
                             Close();
-                            ZoneCreationState.EnterExpansionMode(shrinkZone);
+                            ZoneCreationState.EnterShrinkMode(shrinkZone);
                             return;
                         }
                     }
