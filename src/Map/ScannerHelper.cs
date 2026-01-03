@@ -157,12 +157,18 @@ namespace RimWorldAccess
             Zone = zone;
             IsTerrain = false;
 
-            // Calculate center position of zone
+            // Calculate center position of zone, ensuring it's within the zone for irregular shapes
             if (zone.cells != null && zone.cells.Count > 0)
             {
                 int avgX = (int)zone.cells.Average(c => c.x);
                 int avgZ = (int)zone.cells.Average(c => c.z);
-                Position = new IntVec3(avgX, 0, avgZ);
+                var centerCandidate = new IntVec3(avgX, 0, avgZ);
+                // Use center if it's in the zone; otherwise use the cell closest to the center
+                Position = zone.cells.Contains(centerCandidate)
+                    ? centerCandidate
+                    : zone.cells
+                        .OrderBy(c => (c - centerCandidate).LengthHorizontal)
+                        .First();
             }
             else
             {
@@ -171,15 +177,10 @@ namespace RimWorldAccess
 
             Distance = (Position - cursorPosition).LengthHorizontal;
 
-            // Build label with zone info
-            if (zone is Zone_Growing growZone && growZone.PlantDefToGrow != null)
-            {
-                Label = $"{zone.label} ({growZone.PlantDefToGrow.label})";
-            }
-            else
-            {
-                Label = zone.label;
-            }
+            // Build label with zone info (using ternary for clarity)
+            Label = zone is Zone_Growing growZone && growZone.PlantDefToGrow != null
+                ? $"{zone.label} ({growZone.PlantDefToGrow.label})"
+                : zone.label;
         }
 
         // Constructor for room items
@@ -188,13 +189,19 @@ namespace RimWorldAccess
             Room = room;
             IsTerrain = false;
 
-            // Calculate center position of room
+            // Calculate center position of room, ensuring it's within the room for irregular shapes
             var cells = room.Cells.ToList();
             if (cells.Count > 0)
             {
                 int avgX = (int)cells.Average(c => c.x);
                 int avgZ = (int)cells.Average(c => c.z);
-                Position = new IntVec3(avgX, 0, avgZ);
+                var centerCandidate = new IntVec3(avgX, 0, avgZ);
+                // Use center if it's in the room; otherwise use the cell closest to the center
+                Position = cells.Contains(centerCandidate)
+                    ? centerCandidate
+                    : cells
+                        .OrderBy(c => (c - centerCandidate).LengthHorizontal)
+                        .First();
             }
             else
             {
@@ -717,13 +724,12 @@ namespace RimWorldAccess
                 }
             }
 
-            // Collect all zones
-            var allZones = map.zoneManager.AllZones;
-            foreach (var zone in allZones)
-            {
-                if (zone == null || zone.cells == null || zone.cells.Count == 0)
-                    continue;
+            // Collect all zones - filter to non-empty zones
+            var validZones = map.zoneManager.AllZones.Where(zone =>
+                zone != null && zone.cells != null && zone.cells.Count > 0);
 
+            foreach (var zone in validZones)
+            {
                 var item = new ScannerItem(zone, cursorPosition);
 
                 if (zone is Zone_Growing)
@@ -744,30 +750,14 @@ namespace RimWorldAccess
                 }
             }
 
-            // Collect all rooms
-            var allRooms = map.regionGrid.AllRooms;
-            foreach (var room in allRooms)
-            {
-                // Skip outdoor areas and invalid rooms
-                if (room.PsychologicallyOutdoors || !room.ProperRoom)
-                    continue;
+            // Collect all rooms - filter to indoor, proper rooms with at least one visible cell
+            var visibleIndoorRooms = map.regionGrid.AllRooms.Where(room =>
+                !room.PsychologicallyOutdoors &&
+                room.ProperRoom &&
+                room.Cells.Any(cell => !fogGrid.IsFogged(cell)));
 
-                // Skip rooms that are entirely in fog of war
-                bool hasVisibleCell = false;
-                foreach (var cell in room.Cells)
-                {
-                    if (!fogGrid.IsFogged(cell))
-                    {
-                        hasVisibleCell = true;
-                        break;
-                    }
-                }
-                if (!hasVisibleCell)
-                    continue;
-
-                var item = new ScannerItem(room, cursorPosition);
-                roomsAllSubcat.Items.Add(item);
-            }
+            roomsAllSubcat.Items.AddRange(
+                visibleIndoorRooms.Select(room => new ScannerItem(room, cursorPosition)));
 
             // Group identical items and sort all subcategories by distance
             foreach (var category in new[] { pawnsCategory, tameAnimalsCategory, wildAnimalsCategory,

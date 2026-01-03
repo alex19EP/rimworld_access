@@ -22,12 +22,12 @@ namespace RimWorldAccess
                 return "Out of bounds";
 
 
-            // Check fog of war - if fogged, return "unseen" immediately
+            // Check fog of war - if fogged, return "unseen" with coordinates
             if (position.Fogged(map))
-                return "unseen";
+                return $"unseen, {position.x}, {position.z}";
             var sb = new StringBuilder();
 
-            // Check visibility from drafted pawn FIRST (if one is selected)
+            // Check visibility from drafted pawn (if one is selected)
             bool notVisible = false;
             Pawn selectedPawn = Find.Selector?.FirstSelectedObject as Pawn;
             if (selectedPawn != null && selectedPawn.Drafted && selectedPawn.Spawned && selectedPawn.Map == map)
@@ -35,7 +35,6 @@ namespace RimWorldAccess
                 // Check if pawn can see this position using line of sight
                 if (!GenSight.LineOfSight(selectedPawn.Position, position, map))
                 {
-                    sb.Append("not visible");
                     notVisible = true;
                 }
             }
@@ -61,7 +60,7 @@ namespace RimWorldAccess
                     items.Add(thing);
             }
 
-            bool addedSomething = notVisible;
+            bool addedSomething = false;
 
             // Add individual pawns (most important)
             foreach (var pawn in pawns.Take(3))
@@ -116,24 +115,14 @@ namespace RimWorldAccess
                 addedSomething = true;
             }
 
-            // Add items
+            // Add items (grouped by label)
             if (items.Count > 0)
             {
                 if (addedSomething) sb.Append(", ");
-                if (items.Count == 1)
-                {
-                    string itemLabel = items[0].LabelShort;
-                    CompForbiddable forbiddable = items[0].TryGetComp<CompForbiddable>();
-                    if (forbiddable != null && forbiddable.Forbidden)
-                    {
-                        itemLabel = "Forbidden " + itemLabel;
-                    }
-                    sb.Append(itemLabel);
-                }
-                else
-                {
-                    sb.Append($"{items.Count} items");
-                }
+
+                var groupedItems = GroupItemsByLabel(items);
+                sb.Append(string.Join(", ", groupedItems));
+
                 addedSomething = true;
             }
 
@@ -179,13 +168,15 @@ namespace RimWorldAccess
             }
 
             // Add roofed status (only if roofed, not unroofed)
+            // Natural rock roof (overhead mountain) = "underground", constructed roof = "roofed"
             RoofDef roof = position.GetRoof(map);
             if (roof != null)
             {
+                string roofText = roof.isNatural ? "underground" : "roofed";
                 if (addedSomething)
-                    sb.Append(", roofed");
+                    sb.Append(", " + roofText);
                 else
-                    sb.Append("roofed");
+                    sb.Append(roofText);
                 addedSomething = true;
             }
 
@@ -194,6 +185,12 @@ namespace RimWorldAccess
                 sb.Append($", {position.x}, {position.z}");
             else
                 sb.Append($"{position.x}, {position.z}");
+
+            // Add visibility status after coordinates when drafted pawn cannot see this position
+            if (notVisible)
+            {
+                sb.Append(", not visible");
+            }
 
             return sb.ToString();
         }
@@ -639,26 +636,23 @@ namespace RimWorldAccess
 
             // Show ALL non-hidden stats like the game does in EnvironmentStatsDrawer.DoRoomInfo
             // Format: "StatLabel: TierLabel (value)" with asterisk for important stats
-            List<RoomStatDef> allDefs = DefDatabase<RoomStatDef>.AllDefsListForReading;
-            foreach (RoomStatDef statDef in allDefs)
+            var visibleStats = DefDatabase<RoomStatDef>.AllDefsListForReading.Where(def => !def.isHidden);
+            foreach (RoomStatDef statDef in visibleStats)
             {
-                if (!statDef.isHidden)
+                float value = room.GetStat(statDef);
+                RoomStatScoreStage stage = statDef.GetScoreStage(value);
+                string stageLabel = stage?.label?.CapitalizeFirst() ?? "";
+
+                // Mark important stats for this room type with asterisk
+                string prefix = (room.Role != null && room.Role.IsStatRelated(statDef)) ? "*" : "";
+
+                if (!string.IsNullOrEmpty(stageLabel))
                 {
-                    float value = room.GetStat(statDef);
-                    RoomStatScoreStage stage = statDef.GetScoreStage(value);
-                    string stageLabel = stage?.label?.CapitalizeFirst() ?? "";
-
-                    // Mark important stats for this room type with asterisk
-                    string prefix = (room.Role != null && room.Role.IsStatRelated(statDef)) ? "*" : "";
-
-                    if (!string.IsNullOrEmpty(stageLabel))
-                    {
-                        sb.Append($", {prefix}{statDef.LabelCap}: {stageLabel} ({statDef.ScoreToString(value)})");
-                    }
-                    else
-                    {
-                        sb.Append($", {prefix}{statDef.LabelCap}: {statDef.ScoreToString(value)}");
-                    }
+                    sb.Append($", {prefix}{statDef.LabelCap}: {stageLabel} ({statDef.ScoreToString(value)})");
+                }
+                else
+                {
+                    sb.Append($", {prefix}{statDef.LabelCap}: {statDef.ScoreToString(value)}");
                 }
             }
 
@@ -868,6 +862,44 @@ namespace RimWorldAccess
                 label = GenText.SplitCamelCase(def.defName);
             }
             return label;
+        }
+
+        /// <summary>
+        /// Groups items by their label and returns formatted strings with counts.
+        /// Forbidden items are grouped separately from non-forbidden items.
+        /// Format: "name" for single items, "name Nx" for multiple identical items.
+        /// </summary>
+        private static List<string> GroupItemsByLabel(List<Thing> items)
+        {
+            var result = new List<string>();
+
+            // Group by label + forbidden status
+            var groups = new Dictionary<string, int>();
+
+            foreach (var item in items)
+            {
+                string label = item.LabelShort;
+                CompForbiddable forbiddable = item.TryGetComp<CompForbiddable>();
+                bool isForbidden = forbiddable != null && forbiddable.Forbidden;
+
+                string key = isForbidden ? "Forbidden " + label : label;
+
+                if (groups.TryGetValue(key, out var count))
+                    groups[key] = count + 1;
+                else
+                    groups[key] = 1;
+            }
+
+            // Format each group
+            foreach (var kvp in groups)
+            {
+                if (kvp.Value > 1)
+                    result.Add($"{kvp.Key} {kvp.Value}x");
+                else
+                    result.Add(kvp.Key);
+            }
+
+            return result;
         }
     }
 }

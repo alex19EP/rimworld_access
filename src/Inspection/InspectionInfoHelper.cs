@@ -842,7 +842,7 @@ namespace RimWorldAccess
 
             // Get the inspect string from RimWorld (already localized)
             string inspectString = zone.GetInspectString();
-            if (!string.IsNullOrEmpty(inspectString))
+            if (!string.IsNullOrWhiteSpace(inspectString))
             {
                 sb.AppendLine(inspectString);
             }
