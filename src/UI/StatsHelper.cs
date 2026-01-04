@@ -147,6 +147,46 @@ namespace RimWorldAccess
                 {
                     stats.AddRange(specialStats);
                 }
+
+                // For stuff/materials, add the special stuff stats (factors and offsets)
+                // This matches the game's StuffStats() pattern
+                if (thing.def.IsStuff && thing.def.stuffProps != null)
+                {
+                    var stuffProps = thing.def.stuffProps;
+
+                    // Add stat factors
+                    if (stuffProps.statFactors != null)
+                    {
+                        foreach (var factor in stuffProps.statFactors)
+                        {
+                            stats.Add(new StatDrawEntry(
+                                StatCategoryDefOf.StuffStatFactors,
+                                factor.stat,
+                                factor.value,
+                                StatRequest.ForEmpty(),
+                                ToStringNumberSense.Factor
+                            ));
+                        }
+                    }
+
+                    // Add stat offsets
+                    if (stuffProps.statOffsets != null)
+                    {
+                        foreach (var offset in stuffProps.statOffsets)
+                        {
+                            stats.Add(new StatDrawEntry(
+                                StatCategoryDefOf.StuffStatOffsets,
+                                offset.stat,
+                                offset.value,
+                                StatRequest.ForEmpty(),
+                                ToStringNumberSense.Offset
+                            ));
+                        }
+                    }
+                }
+
+                // Filter out stats that shouldn't be displayed (matches game's RemoveAll logic)
+                stats.RemoveAll(de => (de.stat != null && !de.stat.showNonAbstract) || !de.ShouldDisplay(thing));
             }
             catch (Exception ex)
             {
