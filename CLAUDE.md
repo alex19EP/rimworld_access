@@ -182,7 +182,7 @@ Core/rimworld_access.cs (entry point)
 **By keyboard shortcut:** Check `Input/UnifiedKeyboardPatch.cs` for complete routing
 
 **By screen reader announcement:** Search for `TolkHelper.Speak()` calls
-**RimWOrld's decompiled code**:  A decompiled copy of RimWOrld is located at ../decompiled.  Search this code before making changes that require integration with the game's methods.  
+**RimWorld's decompiled code**: A decompiled copy of RimWorld is located at `./decompiled`. Search this code before making changes that require integration with the game's methods.  
 
 ## Harmony Patching Notes
 

@@ -42,7 +42,7 @@ namespace RimWorldAccess
             // Get all things at this position
             List<Thing> things = position.GetThingList(map);
 
-            // Categorize things
+            // Categorize things (filtering out motes and visual effects)
             var pawns = new List<Pawn>();
             var buildings = new List<Building>();
             var items = new List<Thing>();
@@ -50,6 +50,10 @@ namespace RimWorldAccess
 
             foreach (var thing in things)
             {
+                // Skip motes and visual-only things
+                if (thing is Mote || thing.def.category == ThingCategory.Mote)
+                    continue;
+
                 if (thing is Pawn pawn)
                     pawns.Add(pawn);
                 else if (thing is Building building)
@@ -59,6 +63,9 @@ namespace RimWorldAccess
                 else
                     items.Add(thing);
             }
+
+            // Sort buildings by priority (doors first, then walls, then by category)
+            buildings = buildings.OrderBy(b => GetBuildingPriority(b)).ToList();
 
             bool addedSomething = false;
 
@@ -619,7 +626,7 @@ namespace RimWorldAccess
 
             var sb = new StringBuilder();
 
-            // Get room name with owner (e.g., "Aria's bedroom")
+            // 1. Room label (identifier) - what room is this
             string roomLabel = room.GetRoomRoleLabel();
             if (!string.IsNullOrEmpty(roomLabel))
             {
@@ -634,16 +641,41 @@ namespace RimWorldAccess
                 sb.Append("Room");
             }
 
-            // Show ALL non-hidden stats like the game does in EnvironmentStatsDrawer.DoRoomInfo
-            // Format: "StatLabel: TierLabel (value)" with asterisk for important stats
+            // Stats ordered by volatility: dynamic first, static last
+            // Dynamic: Cleanliness (changes constantly), Wealth (changes often)
+            // Static: Impressiveness (derived), Beauty, Space (rarely changes)
+            var statOrder = new[] { "Cleanliness", "Wealth", "Impressiveness", "Beauty", "Space" };
             var visibleStats = DefDatabase<RoomStatDef>.AllDefsListForReading.Where(def => !def.isHidden);
-            foreach (RoomStatDef statDef in visibleStats)
+
+            // 2. Output stats in defined order
+            foreach (var statName in statOrder)
             {
+                var statDef = visibleStats.FirstOrDefault(s => s.defName == statName);
+                if (statDef == null) continue;
+
                 float value = room.GetStat(statDef);
                 RoomStatScoreStage stage = statDef.GetScoreStage(value);
                 string stageLabel = stage?.label?.CapitalizeFirst() ?? "";
+                string prefix = (room.Role != null && room.Role.IsStatRelated(statDef)) ? "*" : "";
 
-                // Mark important stats for this room type with asterisk
+                if (!string.IsNullOrEmpty(stageLabel))
+                {
+                    sb.Append($", {prefix}{statDef.LabelCap}: {stageLabel} ({statDef.ScoreToString(value)})");
+                }
+                else
+                {
+                    sb.Append($", {prefix}{statDef.LabelCap}: {statDef.ScoreToString(value)}");
+                }
+            }
+
+            // 3. Any remaining stats not in our predefined order
+            foreach (RoomStatDef statDef in visibleStats)
+            {
+                if (statOrder.Contains(statDef.defName)) continue;
+
+                float value = room.GetStat(statDef);
+                RoomStatScoreStage stage = statDef.GetScoreStage(value);
+                string stageLabel = stage?.label?.CapitalizeFirst() ?? "";
                 string prefix = (room.Role != null && room.Role.IsStatRelated(statDef)) ? "*" : "";
 
                 if (!string.IsNullOrEmpty(stageLabel))
@@ -900,6 +932,27 @@ namespace RimWorldAccess
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Gets sort priority for buildings. Lower = announced first.
+        /// </summary>
+        private static int GetBuildingPriority(Building b)
+        {
+            if (b is Building_Door) return 0;
+            if (b.def.building != null && b.def.building.isNaturalRock) return 1;
+
+            var category = b.def.designationCategory?.defName;
+            switch (category)
+            {
+                case "Structure": return 2;
+                case "Furniture": return 3;
+                case "Production": return 4;
+                case "Power": return 5;
+                case "Temperature": return 6;
+                case "Security": return 7;
+                default: return 8;
+            }
         }
     }
 }
