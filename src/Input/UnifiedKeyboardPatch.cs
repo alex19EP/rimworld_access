@@ -1747,7 +1747,7 @@ namespace RimWorldAccess
                     NotificationMenuState.JumpToLast();
                     handled = true;
                 }
-                // Handle Escape - clear search FIRST, then close menu
+                // Handle Escape - clear search FIRST, then go back (detail->list) or close menu
                 else if (key == KeyCode.Escape)
                 {
                     if (typeahead.HasActiveSearch)
@@ -1758,20 +1758,22 @@ namespace RimWorldAccess
                     }
                     else
                     {
-                        NotificationMenuState.CloseMenu();
+                        // HandleEscape goes back from detail view, or closes menu from list view
+                        NotificationMenuState.HandleEscape();
                         handled = true;
                     }
                 }
-                // Handle Backspace for search
-                else if (key == KeyCode.Backspace)
+                // Handle Backspace for search (only in list view)
+                else if (key == KeyCode.Backspace && !NotificationMenuState.IsInDetailView)
                 {
                     NotificationMenuState.HandleBackspace();
                     handled = true;
                 }
-                // Handle Down arrow - navigate notification list
+                // Handle Down arrow - navigate notification list or detail view
                 else if (key == KeyCode.DownArrow)
                 {
-                    if (typeahead.HasActiveSearch && !typeahead.HasNoMatches)
+                    // Typeahead search only works in list view
+                    if (!NotificationMenuState.IsInDetailView && typeahead.HasActiveSearch && !typeahead.HasNoMatches)
                     {
                         // Navigate through matches only when there ARE matches
                         int newIndex = typeahead.GetNextMatch(NotificationMenuState.CurrentIndex);
@@ -1783,15 +1785,16 @@ namespace RimWorldAccess
                     }
                     else
                     {
-                        // Navigate normally (either no search active, OR search with no matches)
+                        // Navigate normally (list view without search, or detail view)
                         NotificationMenuState.SelectNext();
                     }
                     handled = true;
                 }
-                // Handle Up arrow - navigate notification list
+                // Handle Up arrow - navigate notification list or detail view
                 else if (key == KeyCode.UpArrow)
                 {
-                    if (typeahead.HasActiveSearch && !typeahead.HasNoMatches)
+                    // Typeahead search only works in list view
+                    if (!NotificationMenuState.IsInDetailView && typeahead.HasActiveSearch && !typeahead.HasNoMatches)
                     {
                         // Navigate through matches only when there ARE matches
                         int newIndex = typeahead.GetPreviousMatch(NotificationMenuState.CurrentIndex);
@@ -1803,7 +1806,7 @@ namespace RimWorldAccess
                     }
                     else
                     {
-                        // Navigate normally (either no search active, OR search with no matches)
+                        // Navigate normally (list view without search, or detail view)
                         NotificationMenuState.SelectPrevious();
                     }
                     handled = true;
@@ -1820,14 +1823,24 @@ namespace RimWorldAccess
                     NotificationMenuState.SelectNextButton();
                     handled = true;
                 }
-                // Handle Enter - activate current button
+                // Handle Enter - open detail view or activate button
                 else if (key == KeyCode.Return || key == KeyCode.KeypadEnter)
                 {
-                    NotificationMenuState.ActivateCurrentButton();
+                    if (!NotificationMenuState.IsInDetailView)
+                    {
+                        // In list view, Enter opens detail view
+                        NotificationMenuState.EnterDetailView();
+                    }
+                    else if (NotificationMenuState.IsInButtonsSection)
+                    {
+                        // In detail view and on a button, Enter activates it
+                        NotificationMenuState.ActivateCurrentButton();
+                    }
+                    // In detail view but not on a button, do nothing (continue navigating with arrows)
                     handled = true;
                 }
-                // Handle Delete - delete letter
-                else if (key == KeyCode.Delete)
+                // Handle ] (right bracket) - delete letter (acts as right-click per mod convention)
+                else if (key == KeyCode.RightBracket)
                 {
                     NotificationMenuState.DeleteSelected();
                     handled = true;
@@ -1848,16 +1861,19 @@ namespace RimWorldAccess
                     return;
                 }
 
-                // Handle typeahead characters for search
-                bool isLetter = key >= KeyCode.A && key <= KeyCode.Z;
-                bool isNumber = key >= KeyCode.Alpha0 && key <= KeyCode.Alpha9;
-
-                if (isLetter || isNumber)
+                // Handle typeahead characters for search (only in list view)
+                if (!NotificationMenuState.IsInDetailView)
                 {
-                    char c = isLetter ? (char)('a' + (key - KeyCode.A)) : (char)('0' + (key - KeyCode.Alpha0));
-                    NotificationMenuState.HandleTypeahead(c);
-                    Event.current.Use();
-                    return;
+                    bool isLetter = key >= KeyCode.A && key <= KeyCode.Z;
+                    bool isNumber = key >= KeyCode.Alpha0 && key <= KeyCode.Alpha9;
+
+                    if (isLetter || isNumber)
+                    {
+                        char c = isLetter ? (char)('a' + (key - KeyCode.A)) : (char)('0' + (key - KeyCode.Alpha0));
+                        NotificationMenuState.HandleTypeahead(c);
+                        Event.current.Use();
+                        return;
+                    }
                 }
             }
 
