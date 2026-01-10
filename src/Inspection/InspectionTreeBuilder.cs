@@ -40,6 +40,21 @@ namespace RimWorldAccess
         }
 
         /// <summary>
+        /// Extracts a pawn from a thing (pawn or corpse).
+        /// Returns null if the thing is neither a pawn nor a corpse with an inner pawn.
+        /// </summary>
+        private static Pawn GetPawnFromThing(object obj)
+        {
+            if (obj is Pawn pawn)
+                return pawn;
+
+            if (obj is Corpse corpse)
+                return corpse.InnerPawn;
+
+            return null;
+        }
+
+        /// <summary>
         /// Builds the root tree for all objects at a position.
         /// </summary>
         public static InspectionTreeItem BuildTree(List<object> objects)
@@ -84,6 +99,7 @@ namespace RimWorldAccess
 
         /// <summary>
         /// Builds category children for an object when it's expanded.
+        /// Uses dynamic tab discovery for Things (pawns, buildings, items).
         /// </summary>
         private static void BuildObjectChildren(InspectionTreeItem objectItem)
         {
@@ -91,35 +107,232 @@ namespace RimWorldAccess
                 return; // Already built
 
             var obj = objectItem.Data;
-            var categories = InspectionInfoHelper.GetAvailableCategories(obj);
 
-            foreach (var category in categories)
+            // Ensure the object is selected before discovering tabs.
+            // Many tabs (like ITab_Storage) check IsVisible via Find.Selector.SingleSelectedThing.
+            // The selection may have changed since the inspection panel opened.
+            if (obj is Thing thingToSelect && !Find.Selector.IsSelected(thingToSelect))
             {
-                AddChild(objectItem, BuildCategoryItem(obj, category, objectItem.IndentLevel + 1));
+                Find.Selector.ClearSelection();
+                Find.Selector.Select(thingToSelect, playSound: false, forceDesignatorDeselect: false);
+            }
+            else if (obj is Zone zoneToSelect && !Find.Selector.IsSelected(zoneToSelect))
+            {
+                Find.Selector.ClearSelection();
+                Find.Selector.Select(zoneToSelect, playSound: false, forceDesignatorDeselect: false);
+            }
+
+            // Use new dynamic categories that discover tabs from the game
+            var dynamicCategories = InspectionInfoHelper.GetDynamicCategories(obj);
+
+            foreach (var categoryInfo in dynamicCategories)
+            {
+                AddChild(objectItem, BuildCategoryItemFromInfo(obj, categoryInfo, objectItem.IndentLevel + 1));
+            }
+
+            // Add Info Card action for Things (pawns, buildings, items)
+            if (obj is Thing thing)
+            {
+                var infoCardItem = new InspectionTreeItem
+                {
+                    Type = InspectionTreeItem.ItemType.Action,
+                    Label = ConceptDefOf.InfoCard.label.CapitalizeFirst(),
+                    Data = thing,
+                    IndentLevel = objectItem.IndentLevel + 1,
+                    IsExpandable = false
+                };
+                infoCardItem.OnActivate = () =>
+                {
+                    // Close inspection menu before opening Info Card
+                    WindowlessInspectionState.Close();
+
+                    // Open the visual Dialog_InfoCard (InfoCardPatch will activate InfoCardState)
+                    var dialog = new Dialog_InfoCard(thing);
+                    Find.WindowStack.Add(dialog);
+                };
+                AddChild(objectItem, infoCardItem);
+            }
+        }
+
+        /// <summary>
+        /// Builds a tree item from a TabCategoryInfo (dynamic tab discovery).
+        /// </summary>
+        private static InspectionTreeItem BuildCategoryItemFromInfo(object obj, TabCategoryInfo categoryInfo, int indent)
+        {
+            // Use OriginalCategoryName (English) for internal logic
+            string categoryKey = categoryInfo.OriginalCategoryName ?? categoryInfo.Name;
+            // Use Name (translated) for display
+            string displayName = categoryInfo.Name ?? categoryKey;
+
+            var item = new InspectionTreeItem
+            {
+                Type = InspectionTreeItem.ItemType.Category,
+                Label = GetCategoryLabel(obj, categoryKey, displayName),
+                Data = obj,
+                IndentLevel = indent
+            };
+
+            // Check if this is a single-item category (just show inline)
+            if (IsSingleItemCategory(obj, categoryKey))
+            {
+                string content = GetSimplifiedCategoryContent(obj, categoryKey);
+                if (!string.IsNullOrEmpty(content))
+                {
+                    item.Label = $"{displayName}: {content}";
+                }
+                else
+                {
+                    item.Label = displayName;
+                }
+                item.IsExpandable = false;
+                return item;
+            }
+
+            // Use the handler type from the registry to determine behavior
+            switch (categoryInfo.Handler)
+            {
+                case TabHandlerType.Action:
+                    // Actionable category (Bills, Storage, etc.) - opens separate menu
+                    item.IsExpandable = false;
+                    item.OnActivate = () => ExecuteCategoryAction(obj, categoryKey);
+                    break;
+
+                case TabHandlerType.RichNavigation:
+                    // Rich navigation with sub-items (Health, Gear, Skills, etc.)
+                    if (IsExpandableCategory(obj, categoryKey))
+                    {
+                        item.IsExpandable = true;
+                        item.IsExpanded = false;
+                        item.OnActivate = () => BuildCategoryChildren(item, obj, categoryKey);
+                    }
+                    else
+                    {
+                        // Fallback to detailed info display
+                        item.IsExpandable = true;
+                        item.IsExpanded = false;
+                        item.OnActivate = () => BuildDetailedInfoChildren(item, obj, categoryKey);
+                    }
+                    break;
+
+                case TabHandlerType.BasicInspectString:
+                    // Basic fallback - show GetInspectString content or tab info
+                    item.IsExpandable = true;
+                    item.IsExpanded = false;
+                    if (categoryInfo.Tab != null)
+                    {
+                        // This is an actual game tab - use dynamic tab info
+                        item.OnActivate = () => BuildDynamicTabChildren(item, obj, categoryInfo);
+                    }
+                    else
+                    {
+                        // Synthetic category - use existing detailed info
+                        item.OnActivate = () => BuildDetailedInfoChildren(item, obj, categoryKey);
+                    }
+                    break;
+
+                default:
+                    // Default behavior: show detailed info when expanded
+                    item.IsExpandable = true;
+                    item.IsExpanded = false;
+                    item.OnActivate = () => BuildDetailedInfoChildren(item, obj, categoryKey);
+                    break;
+            }
+
+            return item;
+        }
+
+        /// <summary>
+        /// Builds children for a dynamic tab (tabs discovered from the game but not explicitly supported).
+        /// Uses GetInspectString as fallback content.
+        /// </summary>
+        private static void BuildDynamicTabChildren(InspectionTreeItem parentItem, object obj, TabCategoryInfo categoryInfo)
+        {
+            if (parentItem.Children.Count > 0)
+                return; // Already built
+
+            // Defensive null checks
+            if (categoryInfo == null || categoryInfo.Tab == null || !(obj is Thing thing))
+            {
+                // Fallback to simple message
+                AddChild(parentItem, new InspectionTreeItem
+                {
+                    Type = InspectionTreeItem.ItemType.DetailText,
+                    Label = "No information available for this tab.",
+                    IndentLevel = parentItem.IndentLevel + 1,
+                    IsExpandable = false
+                });
+                return;
+            }
+
+            // Get fallback info from the tab
+            string info = TabRegistry.GetFallbackInfo(thing, categoryInfo.Tab);
+
+            if (string.IsNullOrEmpty(info) || info == "No information available.")
+            {
+                AddChild(parentItem, new InspectionTreeItem
+                {
+                    Type = InspectionTreeItem.ItemType.DetailText,
+                    Label = $"Tab '{categoryInfo.Name}' has no keyboard-accessible content.",
+                    IndentLevel = parentItem.IndentLevel + 1,
+                    IsExpandable = false
+                });
+
+                // Add a hint if tab is known but not rich-supported
+                if (!categoryInfo.IsKnown)
+                {
+                    AddChild(parentItem, new InspectionTreeItem
+                    {
+                        Type = InspectionTreeItem.ItemType.DetailText,
+                        Label = "This is an unrecognized tab from a mod or DLC.",
+                        IndentLevel = parentItem.IndentLevel + 1,
+                        IsExpandable = false
+                    });
+                }
+                return;
+            }
+
+            // Strip tags and split into lines
+            info = info.StripTags();
+            var lines = info.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var line in lines.Where(l => !string.IsNullOrWhiteSpace(l)))
+            {
+                AddChild(parentItem, new InspectionTreeItem
+                {
+                    Type = InspectionTreeItem.ItemType.DetailText,
+                    Label = line.Trim(),
+                    IndentLevel = parentItem.IndentLevel + 1,
+                    IsExpandable = false
+                });
             }
         }
 
         /// <summary>
         /// Gets the label for a category, potentially with additional info.
         /// </summary>
-        private static string GetCategoryLabel(object obj, string category)
+        /// <param name="obj">The object being inspected</param>
+        /// <param name="categoryKey">English category name for logic comparisons</param>
+        /// <param name="displayName">Translated category name for display (defaults to categoryKey if not provided)</param>
+        private static string GetCategoryLabel(object obj, string categoryKey, string displayName = null)
         {
+            displayName = displayName ?? categoryKey;
+
             // Special handling for Mood category to show percentage and descriptor
-            if (category == "Mood" && obj is Pawn pawn && pawn.needs?.mood != null)
+            if (categoryKey == "Mood" && obj is Pawn pawn && pawn.needs?.mood != null)
             {
                 float moodPercentage = pawn.needs.mood.CurLevelPercentage * 100f;
                 string moodDescriptor = pawn.needs.mood.MoodString;
-                return $"{category}: {moodPercentage:F0}% ({moodDescriptor})";
+                return $"{displayName}: {moodPercentage:F0}% ({moodDescriptor})";
             }
 
             // Special handling for Job Queue category to show count
-            if (category == "Job Queue" && obj is Pawn jobPawn && jobPawn.jobs?.jobQueue != null)
+            if (categoryKey == "Job Queue" && obj is Pawn jobPawn && jobPawn.jobs?.jobQueue != null)
             {
                 int queueCount = jobPawn.jobs.jobQueue.Count;
-                return $"Job Queue ({queueCount} queued)";
+                return $"{displayName} ({queueCount} queued)";
             }
 
-            return category;
+            return displayName;
         }
 
         /// <summary>
@@ -398,7 +611,9 @@ namespace RimWorldAccess
             if (categoryItem.Children.Count > 0)
                 return; // Already built
 
-            if (!(obj is Pawn pawn))
+            // Handle Pawn-specific categories (supports both live pawns and corpses)
+            Pawn pawn = GetPawnFromThing(obj);
+            if (pawn == null)
                 return;
 
             if (category == "Gear")
@@ -823,11 +1038,8 @@ namespace RimWorldAccess
             string detailedInfo = relation.DetailedInfo.StripTags();
             var lines = detailedInfo.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
 
-            foreach (var line in lines)
+            foreach (var line in lines.Where(l => !string.IsNullOrWhiteSpace(l)))
             {
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-
                 var detailItem = new InspectionTreeItem
                 {
                     Type = InspectionTreeItem.ItemType.DetailText,
@@ -899,11 +1111,8 @@ namespace RimWorldAccess
             {
                 var certaintyDetails = ideologyInfo.CertaintyDetails.StripTags();
                 var lines = certaintyDetails.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var line in lines)
+                foreach (var line in lines.Where(l => !string.IsNullOrWhiteSpace(l)))
                 {
-                    if (string.IsNullOrWhiteSpace(line))
-                        continue;
-
                     var detailItem = new InspectionTreeItem
                     {
                         Type = InspectionTreeItem.ItemType.DetailText,
@@ -920,11 +1129,8 @@ namespace RimWorldAccess
             {
                 var roleDetails = ideologyInfo.RoleDetails.StripTags();
                 var lines = roleDetails.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var line in lines)
+                foreach (var line in lines.Where(l => !string.IsNullOrWhiteSpace(l)))
                 {
-                    if (string.IsNullOrWhiteSpace(line))
-                        continue;
-
                     var detailItem = new InspectionTreeItem
                     {
                         Type = InspectionTreeItem.ItemType.DetailText,
@@ -1218,8 +1424,9 @@ namespace RimWorldAccess
                     hediffLabel += $". {impacts}";
                 }
 
-                // Only expandable if TipStringExtra has meaningful content
-                bool hasExpandableContent = !string.IsNullOrWhiteSpace(hediff.TipStringExtra);
+                // Expandable if TipStringExtra has effects OR Description exists
+                bool hasExpandableContent = !string.IsNullOrWhiteSpace(hediff.TipStringExtra)
+                                         || !string.IsNullOrWhiteSpace(hediff.Description);
 
                 var hediffItem = new InspectionTreeItem
                 {
@@ -1649,11 +1856,8 @@ namespace RimWorldAccess
             // Split into lines and create a detail item for each
             var lines = info.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
 
-            foreach (var line in lines)
+            foreach (var line in lines.Where(l => !string.IsNullOrWhiteSpace(l)))
             {
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-
                 var detailItem = new InspectionTreeItem
                 {
                     Type = InspectionTreeItem.ItemType.DetailText,
