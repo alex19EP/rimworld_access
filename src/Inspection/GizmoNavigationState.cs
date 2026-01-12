@@ -326,13 +326,19 @@ namespace RimWorldAccess
                     return;
                 }
 
-                // For non-Designator gizmos, also select the owner so FloatMenu actions work correctly
+                // For non-Designator gizmos, ensure the owner is selected so FloatMenu actions work correctly
                 // (some actions check Find.Selector.SelectedObjects)
+                // IMPORTANT: Preserve multi-selection if owner is already selected (needed for Link/Unlink gizmos)
                 if (!PawnJustSelected && gizmoOwners.ContainsKey(selectedGizmo) && Find.Selector != null)
                 {
                     ISelectable owner = gizmoOwners[selectedGizmo];
-                    Find.Selector.ClearSelection();
-                    Find.Selector.Select(owner, playSound: false, forceDesignatorDeselect: false);
+                    // Only clear and re-select if owner is NOT already in the current selection
+                    if (!Find.Selector.IsSelected(owner))
+                    {
+                        Find.Selector.ClearSelection();
+                        Find.Selector.Select(owner, playSound: false, forceDesignatorDeselect: false);
+                    }
+                    // Otherwise, preserve existing multi-selection (owner is already selected)
                 }
 
                 // 2. Command_SetPlantToGrow - open accessible plant selection menu

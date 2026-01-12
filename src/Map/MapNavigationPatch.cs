@@ -368,7 +368,10 @@ namespace RimWorldAccess
             // Clear current selection and select the new pawn
             if (Find.Selector != null)
             {
+                // Suppress announcement from SelectionNotificationPatch since we're announcing here
+                SelectionNotificationPatch.SuppressNextAnnouncement();
                 Find.Selector.ClearSelection();
+                SelectionNotificationPatch.SuppressNextAnnouncement();
                 Find.Selector.Select(selectedPawn);
             }
 
@@ -384,7 +387,7 @@ namespace RimWorldAccess
 
             // Announce the selected pawn's name and current task
             // Note: Camera does NOT jump - user can use Alt+C to manually jump to pawn
-            string announcement = $"{selectedPawn.LabelShort} selected - {currentTask}";
+            string announcement = $"{selectedPawn.LabelShort} - {currentTask}";
             TolkHelper.Speak(announcement);
             MapNavigationState.LastAnnouncedInfo = announcement;
             hasAnnouncedThisFrame = true;

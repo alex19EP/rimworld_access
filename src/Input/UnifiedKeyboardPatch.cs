@@ -2541,16 +2541,17 @@ namespace RimWorldAccess
                     Event.current.Use();
 
                     // Decide whether to open gizmos for selected objects or for objects at cursor
-                    // Use selected pawn gizmos ONLY if a pawn was just selected with , or .
+                    // If ANY objects are selected (pawns, buildings, items, etc.), use their gizmos
+                    // This preserves multi-selection for gizmos like "Link Storage Settings"
                     // Otherwise, use objects at the cursor position
-                    if (GizmoNavigationState.PawnJustSelected && Find.Selector != null && Find.Selector.NumSelected > 0)
+                    if (Find.Selector != null && Find.Selector.NumSelected > 0)
                     {
-                        // Open gizmos for the pawn that was just selected with , or .
+                        // Open gizmos for the currently selected objects
                         GizmoNavigationState.Open();
                     }
                     else
                     {
-                        // Open gizmos for objects at the cursor position
+                        // No selection - open gizmos for objects at the cursor position
                         IntVec3 cursorPosition = MapNavigationState.CurrentCursorPosition;
                         GizmoNavigationState.OpenAtCursor(cursorPosition, Find.CurrentMap);
                     }
@@ -2766,6 +2767,40 @@ namespace RimWorldAccess
                 // Open the windowless inspection menu at the current cursor position
                 // This is the same menu that opens with the I key
                 WindowlessInspectionState.Open(cursorPosition);
+                return;
+            }
+
+            // ===== PRIORITY 9.5: Handle left bracket [ key for object selection =====
+            // This mimics left-click selection for sighted players
+            // [ selects first object at cursor, repeated [ cycles through overlapping objects
+            // Shift+[ adds to selection without clearing (multi-select)
+            if (key == KeyCode.LeftBracket)
+            {
+                // Don't process if in world view
+                if (Find.World?.renderer?.wantedMode == RimWorld.Planet.WorldRenderMode.Planet)
+                    return;
+
+                // Only process during normal gameplay with a valid map
+                if (Find.CurrentMap == null)
+                    return;
+
+                // Don't process if any dialog or window that prevents camera motion is open
+                if (Find.WindowStack != null && Find.WindowStack.WindowsPreventCameraMotion)
+                    return;
+
+                // Check if map navigation is initialized
+                if (!MapNavigationState.IsInitialized)
+                    return;
+
+                // Get the cursor position
+                IntVec3 cursorPosition = MapNavigationState.CurrentCursorPosition;
+                Map map = Find.CurrentMap;
+
+                // Perform selection (Shift key = additive mode)
+                bool additive = Event.current.shift;
+                SelectionHelper.SelectAtPosition(cursorPosition, map, additive);
+
+                Event.current.Use();
                 return;
             }
 

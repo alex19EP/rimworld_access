@@ -74,6 +74,8 @@ namespace RimWorldAccess
             {
                 if (addedSomething) sb.Append(", ");
 
+                // Add "Selected" prefix if pawn is selected
+                sb.Append(GetSelectedPrefix(pawn));
                 sb.Append(pawn.LabelShort);
 
                 // Add suffix for hostile or trader pawns
@@ -96,6 +98,9 @@ namespace RimWorldAccess
             foreach (var building in buildings.Take(2))
             {
                 if (addedSomething) sb.Append(", ");
+
+                // Add "Selected" prefix if building is selected
+                sb.Append(GetSelectedPrefix(building));
 
                 // Check if this is a smoothed stone wall and add "wall" suffix
                 string buildingLabel = building.LabelShort;
@@ -122,13 +127,26 @@ namespace RimWorldAccess
                 addedSomething = true;
             }
 
-            // Add items (grouped by label)
+            // Add items (grouped by label, or individually if any are selected)
             if (items.Count > 0)
             {
                 if (addedSomething) sb.Append(", ");
 
-                var groupedItems = GroupItemsByLabel(items);
-                sb.Append(string.Join(", ", groupedItems));
+                // Check if any items are selected - if so, show individually with "Selected" prefix
+                bool anyItemSelected = items.Any(item => IsSelected(item));
+
+                if (anyItemSelected)
+                {
+                    // Show items individually with selection status
+                    var itemLabels = items.Select(item => FormatItemLabel(item, includeSelectionPrefix: true));
+                    sb.Append(string.Join(", ", itemLabels));
+                }
+                else
+                {
+                    // No items selected - use concise grouping
+                    var groupedItems = GroupItemsByLabel(items);
+                    sb.Append(string.Join(", ", groupedItems));
+                }
 
                 addedSomething = true;
             }
@@ -953,6 +971,50 @@ namespace RimWorldAccess
                 case "Power": return 7;
                 default: return 8;
             }
+        }
+
+        /// <summary>
+        /// Checks if a thing is currently selected in RimWorld's selector.
+        /// </summary>
+        /// <param name="thing">The thing to check</param>
+        /// <returns>True if the thing is selected</returns>
+        public static bool IsSelected(Thing thing)
+        {
+            if (thing == null || Find.Selector == null)
+                return false;
+            return Find.Selector.IsSelected(thing);
+        }
+
+        /// <summary>
+        /// Gets the "Selected" prefix if the thing is selected, empty string otherwise.
+        /// </summary>
+        /// <param name="thing">The thing to check</param>
+        /// <returns>"Selected " if selected, empty string otherwise</returns>
+        public static string GetSelectedPrefix(Thing thing)
+        {
+            return IsSelected(thing) ? "Selected " : "";
+        }
+
+        /// <summary>
+        /// Formats an item label with optional selection prefix, stack count, and forbidden status.
+        /// </summary>
+        /// <param name="item">The item to format</param>
+        /// <param name="includeSelectionPrefix">Whether to include "Selected " prefix if item is selected</param>
+        /// <returns>Formatted item label</returns>
+        private static string FormatItemLabel(Thing item, bool includeSelectionPrefix)
+        {
+            string label = includeSelectionPrefix ? GetSelectedPrefix(item) : "";
+            label += item.LabelShort;
+
+            if (item.stackCount > 1)
+                label += $" x{item.stackCount}";
+
+            // Check if forbidden
+            CompForbiddable forbiddable = item.TryGetComp<CompForbiddable>();
+            if (forbiddable != null && forbiddable.Forbidden)
+                label = "Forbidden " + label;
+
+            return label;
         }
     }
 }
